@@ -32,6 +32,13 @@ func Scheduler(opts *Options) http.Handler {
 			scheduler.Call_SUBSCRIBE: subscribe,
 		}
 
+		if call.Type == scheduler.Call_UNKNOWN {
+			w.WriteHeader(http.StatusBadRequest)
+			buf.WriteString(fmt.Sprintf("Failed to validate scheduler::Call: Expecting 'type' to be present"))
+			w.Write(buf.Bytes())
+			return
+		}
+
 		// Invoke handler for different call types
 		handler := callTypeHandlers[call.Type]
 		if handler == nil {
