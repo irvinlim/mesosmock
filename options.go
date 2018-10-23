@@ -38,7 +38,7 @@ func ConfigOptions(config string, flagSet *flag.FlagSet) (*Options, error) {
 	}
 
 	if !strings.Contains(o.ListenAddr, ":") {
-		o.ListenAddr = "127.0.0.1:" + o.ListenAddr
+		o.ListenAddr = ":" + o.ListenAddr
 	}
 
 	return o, nil
