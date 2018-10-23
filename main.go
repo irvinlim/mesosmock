@@ -18,8 +18,7 @@ func main() {
 		log.Fatalf("ERROR: Could not load config %s: %v", *config, err)
 	}
 
-	server, err := NewAPIServer(opts)
-
+	server := NewServer(opts)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Could not listen on %s: %v\n", opts.ListenAddr, err)
 	}

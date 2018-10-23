@@ -1,19 +1,21 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 )
 
-// APIServer creates a Mesos master server for serving HTTP requests.
-type APIServer struct {
+// Server creates a Mesos master server for serving HTTP requests.
+type Server struct {
 	server     *http.Server
 	listenAddr string
 }
 
-// NewAPIServer creates a new API server for serving Mesos master requests.
-func NewAPIServer(opts *Options) (*APIServer, error) {
+// NewServer creates a new API server for serving Mesos master requests.
+func NewServer(opts *Options) *Server {
 	httpLogger := log.New(os.Stdout, "http: ", log.LstdFlags)
 
 	router := http.NewServeMux()
@@ -22,20 +24,20 @@ func NewAPIServer(opts *Options) (*APIServer, error) {
 
 	server := http.Server{
 		Addr:     opts.ListenAddr,
-		Handler:  logging(httpLogger)(router),
+		Handler:  logging(httpLogger)(validateReq()(router)),
 		ErrorLog: httpLogger,
 	}
 
-	apiServer := &APIServer{
+	Server := &Server{
 		server:     &server,
 		listenAddr: opts.ListenAddr,
 	}
 
-	return apiServer, nil
+	return Server
 }
 
 // ListenAndServe starts the API server on the configured address.
-func (s APIServer) ListenAndServe() error {
+func (s Server) ListenAndServe() error {
 	return s.server.ListenAndServe()
 }
 
@@ -46,6 +48,51 @@ func logging(logger *log.Logger) func(http.Handler) http.Handler {
 				logger.Println(r.Method, r.URL.Path, r.RemoteAddr, r.UserAgent())
 			}()
 
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func validateReq() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			buf := new(bytes.Buffer)
+			defer func() {
+				w.Write(buf.Bytes())
+			}()
+
+			if r.Method != "POST" {
+				w.Header().Set("Allow", "POST")
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				buf.WriteString(fmt.Sprintf("Expecting one of { 'POST' }, but received '%s'", r.Method))
+				return
+			}
+
+			contentType := r.Header.Get("Content-Type")
+			if contentType == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				buf.WriteString("Expecting 'Content-Type' to be present")
+				return
+			}
+
+			switch contentType {
+			case
+				"application/json",
+				"application/x-protobuf":
+			default:
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				buf.WriteString("Expecting 'Content-Type' of application/json or application/x-protobuf")
+				return
+			}
+
+			// Protobuf API is not supported in mesosmock.
+			if contentType == "application/x-protobuf" {
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				buf.WriteString("Protobuf API is not supported in mesosmock")
+				return
+			}
+
+			// Otherwise, pass request to be handled by the next middleware.
 			next.ServeHTTP(w, r)
 		})
 	}
