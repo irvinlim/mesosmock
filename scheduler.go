@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/mesos/mesos-go/api/v1/lib/recordio"
@@ -45,6 +46,11 @@ func Scheduler(opts *Options) http.Handler {
 }
 
 func subscribe(call *scheduler.Call, w http.ResponseWriter) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		panic("expected http.ResponseWriter to be an http.Flusher")
+	}
+
 	writer := recordio.NewWriter(w)
 	streamID, err := uuid.NewUUID()
 	if err != nil {
@@ -72,5 +78,9 @@ func subscribe(call *scheduler.Call, w http.ResponseWriter) {
 		return
 	}
 
-	writer.WriteFrame(res)
+	for {
+		writer.WriteFrame(res)
+		flusher.Flush()
+		time.Sleep(5 * time.Second)
+	}
 }
