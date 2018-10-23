@@ -30,7 +30,8 @@ func Scheduler(opts *Options) http.Handler {
 		}
 
 		switch contentType {
-		case "application/json",
+		case
+			"application/json",
 			"application/x-protobuf":
 		default:
 			w.WriteHeader(http.StatusUnsupportedMediaType)
