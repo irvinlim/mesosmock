@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"net/http"
@@ -56,22 +55,17 @@ func logging(logger *log.Logger) func(http.Handler) http.Handler {
 func validateReq() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			buf := new(bytes.Buffer)
-			defer func() {
-				w.Write(buf.Bytes())
-			}()
-
 			if r.Method != "POST" {
 				w.Header().Set("Allow", "POST")
 				w.WriteHeader(http.StatusMethodNotAllowed)
-				buf.WriteString(fmt.Sprintf("Expecting one of { 'POST' }, but received '%s'", r.Method))
+				fmt.Fprintf(w, "Expecting one of { 'POST' }, but received '%s'", r.Method)
 				return
 			}
 
 			contentType := r.Header.Get("Content-Type")
 			if contentType == "" {
 				w.WriteHeader(http.StatusBadRequest)
-				buf.WriteString("Expecting 'Content-Type' to be present")
+				fmt.Fprint(w, "Expecting 'Content-Type' to be present")
 				return
 			}
 
@@ -81,14 +75,14 @@ func validateReq() func(http.Handler) http.Handler {
 				"application/x-protobuf":
 			default:
 				w.WriteHeader(http.StatusUnsupportedMediaType)
-				buf.WriteString("Expecting 'Content-Type' of application/json or application/x-protobuf")
+				fmt.Fprint(w, "Expecting 'Content-Type' of application/json or application/x-protobuf")
 				return
 			}
 
 			// Protobuf API is not supported in mesosmock.
 			if contentType == "application/x-protobuf" {
 				w.WriteHeader(http.StatusUnsupportedMediaType)
-				buf.WriteString("Protobuf API is not supported in mesosmock")
+				fmt.Fprint(w, "Protobuf API is not supported in mesosmock")
 				return
 			}
 

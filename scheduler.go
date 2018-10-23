@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,14 +16,11 @@ import (
 // https://mesos.apache.org/documentation/latest/scheduler-http-api/
 func Scheduler(opts *Options) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		buf := new(bytes.Buffer)
-
 		call := &scheduler.Call{}
 		err := json.NewDecoder(r.Body).Decode(&call)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			buf.WriteString(fmt.Sprintf("Failed to parse body into JSON: %s", err))
-			w.Write(buf.Bytes())
+			fmt.Fprintf(w, "Failed to parse body into JSON: %s", err)
 			return
 		}
 
@@ -34,8 +30,7 @@ func Scheduler(opts *Options) http.Handler {
 
 		if call.Type == scheduler.Call_UNKNOWN {
 			w.WriteHeader(http.StatusBadRequest)
-			buf.WriteString(fmt.Sprintf("Failed to validate scheduler::Call: Expecting 'type' to be present"))
-			w.Write(buf.Bytes())
+			fmt.Fprint(w, "Failed to validate scheduler::Call: Expecting 'type' to be present")
 			return
 		}
 
@@ -43,8 +38,7 @@ func Scheduler(opts *Options) http.Handler {
 		handler := callTypeHandlers[call.Type]
 		if handler == nil {
 			w.WriteHeader(http.StatusBadRequest)
-			buf.WriteString(fmt.Sprintf("Failed to validate scheduler::Call: Handler not implemented"))
-			w.Write(buf.Bytes())
+			fmt.Fprint(w, "Failed to validate scheduler::Call: Handler not implemented")
 			return
 		}
 
