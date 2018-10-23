@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
+	"github.com/google/uuid"
+	"github.com/mesos/mesos-go/api/v1/lib/recordio"
 	"github.com/mesos/mesos-go/api/v1/lib/scheduler"
 )
 
@@ -42,5 +45,32 @@ func Scheduler(opts *Options) http.Handler {
 }
 
 func subscribe(call *scheduler.Call, w http.ResponseWriter) {
+	writer := recordio.NewWriter(w)
+	streamID, err := uuid.NewUUID()
+	if err != nil {
+		log.Panicf("Cannot create stream ID for SUBSCRIBE call: %#v", err)
+		return
+	}
 
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("Mesos-Stream-Id", streamID.String())
+	w.WriteHeader(http.StatusOK)
+
+	heartbeat := float64(15)
+	event := &scheduler.Event{
+		Type: scheduler.Event_SUBSCRIBED,
+		Subscribed: &scheduler.Event_Subscribed{
+			FrameworkID:              call.FrameworkID,
+			HeartbeatIntervalSeconds: &heartbeat,
+		},
+	}
+
+	res, err := event.MarshalJSON()
+	if err != nil {
+		log.Panicf("Cannot marshal JSON for SUBSCRIBE call: %#v", err)
+		return
+	}
+
+	writer.WriteFrame(res)
 }
