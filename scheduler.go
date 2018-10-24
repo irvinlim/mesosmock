@@ -196,7 +196,8 @@ func sendResourceOffers(streamID StreamID) {
 			},
 		}
 
-		log.Printf("Sending 2 offers to framework %s (%s)", state.frameworkInfo.ID.Value, state.frameworkInfo.Name)
+		log.Printf("Sending %d offers to framework %s (%s)", len(offersToSend), state.frameworkInfo.ID.Value,
+			state.frameworkInfo.Name)
 		sendEvent(streamID, event)
 		time.Sleep(5 * time.Second)
 	}
