@@ -67,6 +67,7 @@ func Scheduler(opts *Options) http.Handler {
 func callMux(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *http.Request) error {
 	callTypeHandlers := map[scheduler.Call_Type]func(*Options, *scheduler.Call, http.ResponseWriter, *http.Request) error{
 		scheduler.Call_SUBSCRIBE: subscribe,
+		scheduler.Call_DECLINE:   decline,
 	}
 
 	if call.Type == scheduler.Call_UNKNOWN {
@@ -196,6 +197,19 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 	close(sub.write)
 	close(sub.closed)
 	delete(streams, streamID)
+
+	return nil
+}
+
+func decline(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *http.Request) error {
+	framework := frameworks[*call.FrameworkID]
+	log.Printf("Processing DECLINE call for offers: %s for framework %s (%s)", call.Decline.OfferIDs,
+		framework.frameworkInfo.ID.Value, framework.frameworkInfo.Name)
+
+	for _, offerID := range call.Decline.OfferIDs {
+		delete(offers, offerID)
+		log.Printf("Removing offer %s", offerID.Value)
+	}
 
 	return nil
 }
