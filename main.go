@@ -19,6 +19,8 @@ func main() {
 	}
 
 	server := NewServer(opts)
+
+	log.Printf("Starting server on %s...\n", opts.ListenAddr)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Could not listen on %s: %v\n", opts.ListenAddr, err)
 	}

@@ -60,7 +60,6 @@ func subscribe(call *scheduler.Call, w http.ResponseWriter) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Mesos-Stream-Id", streamID.String())
 	w.WriteHeader(http.StatusOK)
 
