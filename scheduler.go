@@ -136,8 +136,8 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 	// Event consumer, write to HTTP output buffer
 	go func() {
 		for {
-			frame := <-write
-			if _, exists := streams[streamID]; !exists {
+			frame, ok := <-write
+			if !ok {
 				break
 			}
 
@@ -193,6 +193,8 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 	}
 
 	// Clean up stream once closed.
+	close(sub.write)
+	close(sub.closed)
 	delete(streams, streamID)
 
 	return nil
