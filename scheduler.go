@@ -16,8 +16,10 @@ type StreamID = uuid.UUID
 
 type streamState struct {
 	streamID      StreamID
-	subscribed    bool
 	frameworkInfo *mesos.FrameworkInfo
+
+	flusher http.Flusher
+	writer  *recordio.Writer
 }
 
 func newStreamID() StreamID {
@@ -29,11 +31,17 @@ func newStreamID() StreamID {
 	return streamID
 }
 
+type subscription struct {
+	streamID      StreamID
+	frameworkInfo mesos.FrameworkInfo
+}
+
 // Create maps for each stream (framework connection).
 var streamStates = make(map[StreamID]streamState)
-var streamChannels = make(map[StreamID]chan []byte)
+var streamClose = make(map[StreamID]chan bool)
 
-// Store local state.
+// Store local states.
+var subscriptions = make(map[mesos.FrameworkID]subscription)
 var offers = make(map[mesos.OfferID]mesos.Offer)
 
 // Scheduler returns a http.Handler for providing the Mesos Scheduler HTTP API:
@@ -84,42 +92,45 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 	writer := recordio.NewWriter(w)
 	streamID := newStreamID()
 
+	id := call.FrameworkID
 	info := call.Subscribe.FrameworkInfo
-	frameworkID := info.ID.Value
-	frameworkName := info.Name
-	log.Printf("Received subscription request for HTTP framework '%s'", frameworkName)
+	log.Printf("Received subscription request for HTTP framework '%s'", info.Name)
 
-	// Initialise framework
-	log.Printf("Adding framework %s", frameworkID)
-	streamStates[streamID] = streamState{
-		streamID:      streamID,
-		subscribed:    true,
-		frameworkInfo: info,
-	}
+	if id != nil {
+		if id.Value != info.ID.Value {
+			return fmt.Errorf("'framework_id' differs from 'subscribe.framework_info.id'")
+		}
 
-	// Initialise channels
-	log.Printf("Subscribing framework '%s'", frameworkName)
-	streamChannels[streamID] = make(chan []byte)
-	closed := make(chan bool)
-
-	go func() {
-		for {
-			// Stop goroutine once connection has closed.
-			state := streamStates[streamID]
-			if !state.subscribed {
+		// Check if framework already has an existing subscription, and close it.
+		// See https://mesos.apache.org/documentation/latest/scheduler-http-api/#disconnections
+		if subscription, exists := subscriptions[*info.ID]; exists {
+			if closed, exists := streamClose[subscription.streamID]; exists {
 				closed <- true
 			}
-
-			frame := <-streamChannels[streamID]
-			writer.WriteFrame(frame)
-			flusher.Flush()
 		}
-	}()
+	}
+
+	// Initialise framework
+	log.Printf("Adding framework %s", info.ID.Value)
+	streamStates[streamID] = streamState{
+		streamID:      streamID,
+		frameworkInfo: info,
+		flusher:       flusher,
+		writer:        writer,
+	}
+
+	log.Printf("Subscribing framework '%s'", info.Name)
+	subscriptions[*info.ID] = subscription{
+		streamID:      streamID,
+		frameworkInfo: *info,
+	}
+
+	streamClose[streamID] = make(chan bool)
 
 	// Mock event producers, as if this is the master of a real Mesos cluster
 	go sendResourceOffers(streamID)
 
-	log.Printf("Added framework %s", frameworkID)
+	log.Printf("Added framework %s", info.ID.Value)
 
 	// Send headers
 	w.Header().Set("Content-Type", "application/json")
@@ -137,16 +148,31 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 	}
 	sendEvent(streamID, event)
 
-	<-closed
+	// TODO: Handle disconnections and unsubscribe stream.
+
+	<-streamClose[streamID]
+
+	// Send failover error.
+	failover := &scheduler.Event{
+		Type: scheduler.Event_ERROR,
+		Error: &scheduler.Event_Error{
+			Message: "Framework failed over",
+		},
+	}
+	sendEvent(streamID, failover)
+
+	// Clean up stream once closed.
+	delete(streamStates, streamID)
+	close(streamClose[streamID])
+	delete(streamClose, streamID)
+
 	return nil
 }
 
 func sendResourceOffers(streamID StreamID) {
 	for {
-		state := streamStates[streamID]
-
-		// Stop goroutine once framework has ended.
-		if !state.subscribed {
+		state, exists := streamStates[streamID]
+		if !exists {
 			break
 		}
 
@@ -182,5 +208,8 @@ func sendEvent(streamID StreamID, event *scheduler.Event) {
 		log.Panicf("Cannot marshal JSON for %s event: %#v", event.Type.String(), err)
 	}
 
-	streamChannels[streamID] <- frame
+	if state, exists := streamStates[streamID]; exists {
+		state.writer.WriteFrame(frame)
+		state.flusher.Flush()
+	}
 }
