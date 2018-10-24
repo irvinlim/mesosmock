@@ -3,14 +3,23 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/mesos/mesos-go/api/v1/lib"
+	"github.com/mesos/mesos-go/api/v1/lib/recordio"
+	"github.com/mesos/mesos-go/api/v1/lib/scheduler"
 	"log"
 	"net/http"
 	"time"
-
-	"github.com/google/uuid"
-	"github.com/mesos/mesos-go/api/v1/lib/recordio"
-	"github.com/mesos/mesos-go/api/v1/lib/scheduler"
 )
+
+type frameworkState struct {
+	subscribed bool
+	streamID   string
+}
+
+var frameworkStates = make(map[string]frameworkState)
+var frameworkChans = make(map[string]chan []byte)
+var offers = make(map[mesos.OfferID]mesos.Offer)
 
 // Scheduler returns a http.Handler for providing the Mesos Scheduler HTTP API:
 // https://mesos.apache.org/documentation/latest/scheduler-http-api/
@@ -63,10 +72,47 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 		log.Panicf("Cannot create stream ID for SUBSCRIBE call: %#v", err)
 	}
 
+	frameworkID := call.Subscribe.FrameworkInfo.ID.Value
+	frameworkName := call.Subscribe.FrameworkInfo.Name
+	log.Printf("Received subscription request for HTTP framework '%s'", frameworkName)
+
+	// Initialise framework
+	log.Printf("Adding framework %s", frameworkID)
+	frameworkStates[frameworkID] = frameworkState{
+		subscribed: true,
+		streamID:   streamID.String(),
+	}
+
+	// Initialise channels
+	log.Printf("Subscribing framework '%s'", frameworkName)
+	frameworkChans[frameworkID] = make(chan []byte)
+	closed := make(chan bool)
+
+	go func() {
+		for {
+			// Stop goroutine once framework has ended.
+			state := frameworkStates[frameworkID]
+			if !state.subscribed {
+				closed <- true
+			}
+
+			frame := <-frameworkChans[frameworkID]
+			writer.WriteFrame(frame)
+			flusher.Flush()
+		}
+	}()
+
+	// Mock event producers, as if this is the master of a real Mesos cluster
+	go sendResourceOffers(frameworkID)
+
+	log.Printf("Added framework %s", frameworkID)
+
+	// Send headers
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Mesos-Stream-Id", streamID.String())
 	w.WriteHeader(http.StatusOK)
 
+	// Create SUBSCRIBED event
 	heartbeat := float64(15)
 	event := &scheduler.Event{
 		Type: scheduler.Event_SUBSCRIBED,
@@ -75,15 +121,51 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 			HeartbeatIntervalSeconds: &heartbeat,
 		},
 	}
+	sendEvent(frameworkID, event)
 
-	res, err := event.MarshalJSON()
-	if err != nil {
-		log.Panicf("Cannot marshal JSON for SUBSCRIBE call: %#v", err)
-	}
+	<-closed
+	return nil
+}
 
+func sendResourceOffers(frameworkID string) {
 	for {
-		writer.WriteFrame(res)
-		flusher.Flush()
+		state := frameworkStates[frameworkID]
+
+		// Stop goroutine once framework has ended.
+		if !state.subscribed {
+			break
+		}
+
+		var offersToSend []mesos.Offer
+		for i := 0; i < 1; i++ {
+			offerID := mesos.OfferID{Value: uuid.New().String()}
+			offer := mesos.Offer{
+				ID:          offerID,
+				AgentID:     mesos.AgentID{Value: uuid.New().String()},
+				FrameworkID: mesos.FrameworkID{Value: frameworkID},
+			}
+
+			offers[offerID] = offer
+			offersToSend = append(offersToSend, offer)
+		}
+
+		event := &scheduler.Event{
+			Type: scheduler.Event_OFFERS,
+			Offers: &scheduler.Event_Offers{
+				Offers: offersToSend,
+			},
+		}
+
+		sendEvent(frameworkID, event)
 		time.Sleep(5 * time.Second)
 	}
+}
+
+func sendEvent(frameworkID string, event *scheduler.Event) {
+	frame, err := event.MarshalJSON()
+	if err != nil {
+		log.Panicf("Cannot marshal JSON for %s event: %#v", event.Type.String(), err)
+	}
+
+	frameworkChans[frameworkID] <- frame
 }
