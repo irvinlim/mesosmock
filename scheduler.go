@@ -32,13 +32,12 @@ func newStreamID() StreamID {
 }
 
 type subscription struct {
-	streamID      StreamID
-	frameworkInfo mesos.FrameworkInfo
+	streamID StreamID
+	closed   chan struct{}
 }
 
 // Create maps for each stream (framework connection).
 var streamStates = make(map[StreamID]streamState)
-var streamClose = make(map[StreamID]chan bool)
 
 // Store local states.
 var subscriptions = make(map[mesos.FrameworkID]subscription)
@@ -56,7 +55,7 @@ func Scheduler(opts *Options) http.Handler {
 			return
 		}
 
-		err = callMux(opts, call, w)
+		err = callMux(opts, call, w, r)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(w, "Failed to validate scheduler::Call: %#v", err)
@@ -65,8 +64,8 @@ func Scheduler(opts *Options) http.Handler {
 	})
 }
 
-func callMux(opts *Options, call *scheduler.Call, w http.ResponseWriter) error {
-	callTypeHandlers := map[scheduler.Call_Type]func(*Options, *scheduler.Call, http.ResponseWriter) error{
+func callMux(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *http.Request) error {
+	callTypeHandlers := map[scheduler.Call_Type]func(*Options, *scheduler.Call, http.ResponseWriter, *http.Request) error{
 		scheduler.Call_SUBSCRIBE: subscribe,
 	}
 
@@ -80,10 +79,10 @@ func callMux(opts *Options, call *scheduler.Call, w http.ResponseWriter) error {
 		return fmt.Errorf("handler not implemented")
 	}
 
-	return handler(opts, call, w)
+	return handler(opts, call, w, r)
 }
 
-func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error {
+func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *http.Request) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		panic("expected http.ResponseWriter to be an http.Flusher")
@@ -96,6 +95,7 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 	info := call.Subscribe.FrameworkInfo
 	log.Printf("Received subscription request for HTTP framework '%s'", info.Name)
 
+	var closeOld chan struct{}
 	if id != nil {
 		if id.Value != info.ID.Value {
 			return fmt.Errorf("'framework_id' differs from 'subscribe.framework_info.id'")
@@ -104,13 +104,11 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 		// Check if framework already has an existing subscription, and close it.
 		// See https://mesos.apache.org/documentation/latest/scheduler-http-api/#disconnections
 		if subscription, exists := subscriptions[*info.ID]; exists {
-			if closed, exists := streamClose[subscription.streamID]; exists {
-				closed <- true
-			}
+			closeOld = subscription.closed
 		}
 	}
 
-	// Initialise framework
+	// Initialise subscription
 	log.Printf("Adding framework %s", info.ID.Value)
 	streamStates[streamID] = streamState{
 		streamID:      streamID,
@@ -120,12 +118,16 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 	}
 
 	log.Printf("Subscribing framework '%s'", info.Name)
-	subscriptions[*info.ID] = subscription{
-		streamID:      streamID,
-		frameworkInfo: *info,
+	sub := subscription{
+		streamID: streamID,
+		closed:   make(chan struct{}),
 	}
+	subscriptions[*info.ID] = sub
 
-	streamClose[streamID] = make(chan bool)
+	if closeOld != nil {
+		log.Printf("Disconnecting old subscription")
+		closeOld <- struct{}{}
+	}
 
 	// Mock event producers, as if this is the master of a real Mesos cluster
 	go sendResourceOffers(streamID)
@@ -148,23 +150,30 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 	}
 	sendEvent(streamID, event)
 
-	// TODO: Handle disconnections and unsubscribe stream.
+	// Block until subscription is closed in either direction.
+	select {
 
-	<-streamClose[streamID]
+	case <-sub.closed:
+		// Subscription was closed by another subscription
+		log.Printf("Ignoring disconnection for framework %s (%s) as it has already reconnected", info.ID.Value,
+			info.Name)
+		failover := &scheduler.Event{
+			Type: scheduler.Event_ERROR,
+			Error: &scheduler.Event_Error{
+				Message: "Framework failed over",
+			},
+		}
+		sendEvent(streamID, failover)
 
-	// Send failover error.
-	failover := &scheduler.Event{
-		Type: scheduler.Event_ERROR,
-		Error: &scheduler.Event_Error{
-			Message: "Framework failed over",
-		},
+	case <-r.Context().Done():
+		// Subscription was closed by disconnected scheduler connection
+		// TODO: Handle deactivation of frameworks and failover timeouts.
+		log.Printf("Disconnecting framework %s (%s)", info.ID.Value, info.Name)
+		delete(subscriptions, *info.ID)
 	}
-	sendEvent(streamID, failover)
 
 	// Clean up stream once closed.
 	delete(streamStates, streamID)
-	close(streamClose[streamID])
-	delete(streamClose, streamID)
 
 	return nil
 }
