@@ -29,3 +29,4 @@ dist
 
 # Project-specific files
 config.toml
+/mesosmock
