@@ -10,6 +10,8 @@ func main() {
 	flagSet := flag.NewFlagSet("mesosmock", flag.ExitOnError)
 	config := flagSet.String("config", "", "path to config.json")
 	flagSet.String("listenAddr", "5050", "address:port or port to listen on for HTTP requests")
+	flagSet.String("offerCount", "", "number of offers to send in each batch")
+	flagSet.String("offerWaitSeconds", "", "duration between each batch of offers sent")
 
 	flagSet.Parse(os.Args[1:])
 

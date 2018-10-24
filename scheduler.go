@@ -148,7 +148,7 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 
 	// Mock event producers, as if this is the master of a real Mesos cluster
 	go sendHeartbeat(streamID)
-	go sendResourceOffers(streamID)
+	go sendResourceOffers(opts, streamID)
 
 	log.Printf("Added framework %s", info.ID.Value)
 
@@ -215,7 +215,7 @@ func sendHeartbeat(streamID StreamID) {
 	}
 }
 
-func sendResourceOffers(streamID StreamID) {
+func sendResourceOffers(opts *Options, streamID StreamID) {
 	for {
 		state, exists := streams[streamID]
 		if !exists {
@@ -225,7 +225,7 @@ func sendResourceOffers(streamID StreamID) {
 		framework := frameworks[state.frameworkID]
 
 		var offersToSend []mesos.Offer
-		for i := 0; i < 1; i++ {
+		for i := 0; i < opts.OfferCount; i++ {
 			offerID := mesos.OfferID{Value: uuid.New().String()}
 			offer := mesos.Offer{
 				ID:          offerID,
@@ -247,7 +247,8 @@ func sendResourceOffers(streamID StreamID) {
 		log.Printf("Sending %d offers to framework %s (%s)", len(offersToSend), framework.frameworkInfo.ID.Value,
 			framework.frameworkInfo.Name)
 		sendEvent(streamID, event)
-		time.Sleep(5 * time.Second)
+
+		time.Sleep(time.Duration(opts.OfferWaitSeconds) * time.Second)
 	}
 }
 
