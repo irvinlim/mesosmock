@@ -12,13 +12,28 @@ import (
 	"time"
 )
 
-type frameworkState struct {
-	subscribed bool
-	streamID   string
+type StreamID = uuid.UUID
+
+type streamState struct {
+	streamID      StreamID
+	subscribed    bool
+	frameworkInfo *mesos.FrameworkInfo
 }
 
-var frameworkStates = make(map[string]frameworkState)
-var frameworkChans = make(map[string]chan []byte)
+func newStreamID() StreamID {
+	streamID, err := uuid.NewUUID()
+	if err != nil {
+		log.Panicf("Cannot create new stream ID: %#v", err)
+	}
+
+	return streamID
+}
+
+// Create maps for each stream (framework connection).
+var streamStates = make(map[StreamID]streamState)
+var streamChannels = make(map[StreamID]chan []byte)
+
+// Store local state.
 var offers = make(map[mesos.OfferID]mesos.Offer)
 
 // Scheduler returns a http.Handler for providing the Mesos Scheduler HTTP API:
@@ -67,43 +82,42 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 	}
 
 	writer := recordio.NewWriter(w)
-	streamID, err := uuid.NewUUID()
-	if err != nil {
-		log.Panicf("Cannot create stream ID for SUBSCRIBE call: %#v", err)
-	}
+	streamID := newStreamID()
 
-	frameworkID := call.Subscribe.FrameworkInfo.ID.Value
-	frameworkName := call.Subscribe.FrameworkInfo.Name
+	info := call.Subscribe.FrameworkInfo
+	frameworkID := info.ID.Value
+	frameworkName := info.Name
 	log.Printf("Received subscription request for HTTP framework '%s'", frameworkName)
 
 	// Initialise framework
 	log.Printf("Adding framework %s", frameworkID)
-	frameworkStates[frameworkID] = frameworkState{
-		subscribed: true,
-		streamID:   streamID.String(),
+	streamStates[streamID] = streamState{
+		streamID:      streamID,
+		subscribed:    true,
+		frameworkInfo: info,
 	}
 
 	// Initialise channels
 	log.Printf("Subscribing framework '%s'", frameworkName)
-	frameworkChans[frameworkID] = make(chan []byte)
+	streamChannels[streamID] = make(chan []byte)
 	closed := make(chan bool)
 
 	go func() {
 		for {
-			// Stop goroutine once framework has ended.
-			state := frameworkStates[frameworkID]
+			// Stop goroutine once connection has closed.
+			state := streamStates[streamID]
 			if !state.subscribed {
 				closed <- true
 			}
 
-			frame := <-frameworkChans[frameworkID]
+			frame := <-streamChannels[streamID]
 			writer.WriteFrame(frame)
 			flusher.Flush()
 		}
 	}()
 
 	// Mock event producers, as if this is the master of a real Mesos cluster
-	go sendResourceOffers(frameworkID)
+	go sendResourceOffers(streamID)
 
 	log.Printf("Added framework %s", frameworkID)
 
@@ -117,19 +131,19 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error
 	event := &scheduler.Event{
 		Type: scheduler.Event_SUBSCRIBED,
 		Subscribed: &scheduler.Event_Subscribed{
-			FrameworkID:              call.Subscribe.FrameworkInfo.ID,
+			FrameworkID:              info.ID,
 			HeartbeatIntervalSeconds: &heartbeat,
 		},
 	}
-	sendEvent(frameworkID, event)
+	sendEvent(streamID, event)
 
 	<-closed
 	return nil
 }
 
-func sendResourceOffers(frameworkID string) {
+func sendResourceOffers(streamID StreamID) {
 	for {
-		state := frameworkStates[frameworkID]
+		state := streamStates[streamID]
 
 		// Stop goroutine once framework has ended.
 		if !state.subscribed {
@@ -142,7 +156,7 @@ func sendResourceOffers(frameworkID string) {
 			offer := mesos.Offer{
 				ID:          offerID,
 				AgentID:     mesos.AgentID{Value: uuid.New().String()},
-				FrameworkID: mesos.FrameworkID{Value: frameworkID},
+				FrameworkID: *state.frameworkInfo.ID,
 			}
 
 			offers[offerID] = offer
@@ -156,16 +170,17 @@ func sendResourceOffers(frameworkID string) {
 			},
 		}
 
-		sendEvent(frameworkID, event)
+		log.Printf("Sending 2 offers to framework %s (%s)", state.frameworkInfo.ID.Value, state.frameworkInfo.Name)
+		sendEvent(streamID, event)
 		time.Sleep(5 * time.Second)
 	}
 }
 
-func sendEvent(frameworkID string, event *scheduler.Event) {
+func sendEvent(streamID StreamID, event *scheduler.Event) {
 	frame, err := event.MarshalJSON()
 	if err != nil {
 		log.Panicf("Cannot marshal JSON for %s event: %#v", event.Type.String(), err)
 	}
 
-	frameworkChans[frameworkID] <- frame
+	streamChannels[streamID] <- frame
 }
