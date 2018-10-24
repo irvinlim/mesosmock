@@ -18,8 +18,7 @@ type streamState struct {
 	streamID      StreamID
 	frameworkInfo *mesos.FrameworkInfo
 
-	flusher http.Flusher
-	writer  *recordio.Writer
+	write chan<- []byte
 }
 
 func newStreamID() StreamID {
@@ -110,11 +109,11 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 
 	// Initialise subscription
 	log.Printf("Adding framework %s", info.ID.Value)
+	write := make(chan []byte)
 	streamStates[streamID] = streamState{
 		streamID:      streamID,
 		frameworkInfo: info,
-		flusher:       flusher,
-		writer:        writer,
+		write:         write,
 	}
 
 	log.Printf("Subscribing framework '%s'", info.Name)
@@ -129,7 +128,21 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 		closeOld <- struct{}{}
 	}
 
+	// Event consumer, write to HTTP output buffer
+	go func() {
+		for {
+			if _, exists := streamStates[streamID]; !exists {
+				break
+			}
+
+			frame := <-write
+			writer.WriteFrame(frame)
+			flusher.Flush()
+		}
+	}()
+
 	// Mock event producers, as if this is the master of a real Mesos cluster
+	go sendHeartbeat(streamID)
 	go sendResourceOffers(streamID)
 
 	log.Printf("Added framework %s", info.ID.Value)
@@ -178,6 +191,21 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 	return nil
 }
 
+func sendHeartbeat(streamID StreamID) {
+	for {
+		if _, exists := streamStates[streamID]; !exists {
+			break
+		}
+
+		event := &scheduler.Event{
+			Type: scheduler.Event_HEARTBEAT,
+		}
+		sendEvent(streamID, event)
+
+		time.Sleep(15 * time.Second)
+	}
+}
+
 func sendResourceOffers(streamID StreamID) {
 	for {
 		state, exists := streamStates[streamID]
@@ -219,7 +247,6 @@ func sendEvent(streamID StreamID, event *scheduler.Event) {
 	}
 
 	if state, exists := streamStates[streamID]; exists {
-		state.writer.WriteFrame(frame)
-		state.flusher.Flush()
+		state.write <- frame
 	}
 }
