@@ -24,7 +24,7 @@ func Scheduler(opts *Options) http.Handler {
 			return
 		}
 
-		err = callMux(call, w)
+		err = callMux(opts, call, w)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(w, "Failed to validate scheduler::Call: %#v", err)
@@ -33,25 +33,25 @@ func Scheduler(opts *Options) http.Handler {
 	})
 }
 
-func callMux(call *scheduler.Call, w http.ResponseWriter) error {
-	callTypeHandlers := map[scheduler.Call_Type]func(*scheduler.Call, http.ResponseWriter) error{
+func callMux(opts *Options, call *scheduler.Call, w http.ResponseWriter) error {
+	callTypeHandlers := map[scheduler.Call_Type]func(*Options, *scheduler.Call, http.ResponseWriter) error{
 		scheduler.Call_SUBSCRIBE: subscribe,
 	}
 
 	if call.Type == scheduler.Call_UNKNOWN {
-		return fmt.Errorf("Expecting 'type' to be present")
+		return fmt.Errorf("expecting 'type' to be present")
 	}
 
 	// Invoke handler for different call types
 	handler := callTypeHandlers[call.Type]
 	if handler == nil {
-		return fmt.Errorf("Handler not implemented")
+		return fmt.Errorf("handler not implemented")
 	}
 
-	return handler(call, w)
+	return handler(opts, call, w)
 }
 
-func subscribe(call *scheduler.Call, w http.ResponseWriter) error {
+func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		panic("expected http.ResponseWriter to be an http.Flusher")
