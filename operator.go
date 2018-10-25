@@ -24,13 +24,13 @@ func Operator(state *MasterState) http.Handler {
 		res, err := operatorCallMux(state, call)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "Failed to validate master::Call: %#v", err)
+			fmt.Fprintf(w, "Failed to validate master::Call: %s", err)
 			return
 		}
 
 		body, err := res.MarshalJSON()
 		if err != nil {
-			log.Panicf("Cannot marshal JSON for master response: %#v", err)
+			log.Panicf("Cannot marshal JSON for master response: %s", err)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -53,7 +53,7 @@ func operatorCallMux(state *MasterState, call *master.Call) (*master.Response, e
 	// Invoke handler for different call types
 	handler := callTypeHandlers[call.Type]
 	if handler == nil {
-		return nil, fmt.Errorf("handler not implemented")
+		return nil, fmt.Errorf("handler for '%s' call not implemented", call.Type.Enum().String())
 	}
 
 	return handler(call, state)

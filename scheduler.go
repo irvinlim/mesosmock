@@ -26,7 +26,7 @@ type schedulerReq struct {
 func newStreamID() StreamID {
 	streamID, err := uuid.NewUUID()
 	if err != nil {
-		log.Panicf("Cannot create new stream ID: %#v", err)
+		log.Panicf("Cannot create new stream ID: %s", err)
 	}
 
 	return streamID
@@ -65,7 +65,7 @@ func Scheduler(opts *Options, state *MasterState) http.Handler {
 		err = schedulerCallMux(req)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "Failed to validate scheduler::Call: %#v", err)
+			fmt.Fprintf(w, "Failed to validate scheduler::Call: %s", err)
 			return
 		}
 	})
@@ -84,7 +84,7 @@ func schedulerCallMux(req schedulerReq) error {
 	// Invoke handler for different call types
 	handler := callTypeHandlers[req.call.Type]
 	if handler == nil {
-		return fmt.Errorf("handler not implemented")
+		return fmt.Errorf("handler for '%s' call not implemented", req.call.Type.Enum().String())
 	}
 
 	return handler(req.call, req.state, req)
@@ -282,7 +282,7 @@ func sendResourceOffers(state *MasterState, streamID StreamID) {
 func sendEvent(streamID StreamID, event *scheduler.Event) {
 	frame, err := event.MarshalJSON()
 	if err != nil {
-		log.Panicf("Cannot marshal JSON for %s event: %#v", event.Type.String(), err)
+		log.Panicf("Cannot marshal JSON for %s event: %s", event.Type.String(), err)
 	}
 
 	if stream, exists := streams[streamID]; exists {
