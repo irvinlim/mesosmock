@@ -23,10 +23,6 @@ func newStreamID() StreamID {
 	return streamID
 }
 
-type frameworkState struct {
-	frameworkInfo *mesos.FrameworkInfo
-}
-
 type subscription struct {
 	streamID    StreamID
 	frameworkID mesos.FrameworkID
@@ -35,13 +31,8 @@ type subscription struct {
 	closed chan struct{}
 }
 
-// Create maps for each stream (framework connection).
 var streams = make(map[StreamID]subscription)
 var subscriptions = make(map[mesos.FrameworkID]subscription)
-var frameworks = make(map[mesos.FrameworkID]frameworkState)
-
-// Store local states.
-var offers = make(map[mesos.OfferID]mesos.Offer)
 
 // Scheduler returns a http.Handler for providing the Mesos Scheduler HTTP API:
 // https://mesos.apache.org/documentation/latest/scheduler-http-api/
@@ -110,11 +101,9 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 	}
 
 	// Initialise framework
-	log.Printf("Adding framework %s", info.ID.Value)
-	if _, exists := frameworks[*info.ID]; !exists {
-		frameworks[*info.ID] = frameworkState{
-			frameworkInfo: info,
-		}
+	if _, exists := State.Frameworks[*info.ID]; !exists {
+		log.Printf("Adding framework %s", info.ID.Value)
+		State.Frameworks[*info.ID] = NewFramework(info)
 	}
 
 	// Subscribe framework
@@ -171,7 +160,6 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 
 	// Block until subscription is closed in either direction.
 	select {
-
 	case <-sub.closed:
 		// Subscription was closed by another subscription
 		log.Printf("Ignoring disconnection for framework %s (%s) as it has already reconnected", info.ID.Value,
@@ -190,7 +178,7 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 		// TODO: Handle deactivation of frameworks and failover timeouts.
 		log.Printf("Disconnecting framework %s (%s)", info.ID.Value, info.Name)
 		delete(subscriptions, *info.ID)
-		delete(frameworks, *info.ID)
+		delete(State.Frameworks, *info.ID)
 	}
 
 	// Clean up stream once closed.
@@ -202,12 +190,12 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 }
 
 func decline(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *http.Request) error {
-	framework := frameworks[*call.FrameworkID]
+	framework := State.Frameworks[*call.FrameworkID]
 	log.Printf("Processing DECLINE call for offers: %s for framework %s (%s)", call.Decline.OfferIDs,
-		framework.frameworkInfo.ID.Value, framework.frameworkInfo.Name)
+		framework.FrameworkInfo.ID.Value, framework.FrameworkInfo.Name)
 
 	for _, offerID := range call.Decline.OfferIDs {
-		delete(offers, offerID)
+		delete(State.Offers, offerID)
 		log.Printf("Removing offer %s", offerID.Value)
 	}
 
@@ -231,23 +219,20 @@ func sendHeartbeat(streamID StreamID) {
 
 func sendResourceOffers(opts *Options, streamID StreamID) {
 	for {
-		state, exists := streams[streamID]
+		stream, exists := streams[streamID]
 		if !exists {
 			break
 		}
 
-		framework := frameworks[state.frameworkID]
+		framework := State.Frameworks[stream.frameworkID]
 
 		var offersToSend []mesos.Offer
-		for i := 0; i < opts.OfferCount; i++ {
-			offerID := mesos.OfferID{Value: uuid.New().String()}
-			offer := mesos.Offer{
-				ID:          offerID,
-				AgentID:     mesos.AgentID{Value: uuid.New().String()},
-				FrameworkID: *framework.frameworkInfo.ID,
-			}
 
-			offers[offerID] = offer
+		for _, agentID := range State.AgentIDs {
+			offerID := mesos.OfferID{Value: uuid.New().String()}
+			offer := NewOffer(*framework.FrameworkInfo.ID, agentID)
+
+			State.Offers[offerID] = offer
 			offersToSend = append(offersToSend, offer)
 		}
 
@@ -258,8 +243,8 @@ func sendResourceOffers(opts *Options, streamID StreamID) {
 			},
 		}
 
-		log.Printf("Sending %d offers to framework %s (%s)", len(offersToSend), framework.frameworkInfo.ID.Value,
-			framework.frameworkInfo.Name)
+		log.Printf("Sending %d offers to framework %s (%s)", len(offersToSend), framework.FrameworkInfo.ID.Value,
+			framework.FrameworkInfo.Name)
 		sendEvent(streamID, event)
 
 		time.Sleep(time.Duration(opts.OfferWaitSeconds) * time.Second)
@@ -272,7 +257,7 @@ func sendEvent(streamID StreamID, event *scheduler.Event) {
 		log.Panicf("Cannot marshal JSON for %s event: %#v", event.Type.String(), err)
 	}
 
-	if state, exists := streams[streamID]; exists {
-		state.write <- frame
+	if stream, exists := streams[streamID]; exists {
+		stream.write <- frame
 	}
 }

@@ -22,14 +22,14 @@ func NewServer(opts *Options) *Server {
 	router.Handle("/master/api/v1/scheduler", Scheduler(opts))
 
 	server := http.Server{
-		Addr:     opts.ListenAddr,
+		Addr:     opts.address,
 		Handler:  logging(httpLogger)(validateReq()(router)),
 		ErrorLog: httpLogger,
 	}
 
 	Server := &Server{
 		server:     &server,
-		listenAddr: opts.ListenAddr,
+		listenAddr: opts.address,
 	}
 
 	return Server

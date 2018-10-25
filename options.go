@@ -5,21 +5,27 @@ import (
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/mreiferson/go-options"
-	"strings"
+	"net"
 )
 
 // Options for configuration of mesosmock, passed via
 // command-line arguments, or loaded from config file.
 type Options struct {
-	ListenAddr string `flag:"listenAddr" cfg:"listen_addr"`
+	IP               string `flag:"ip" cfg:"ip"`
+	Port             int    `flag:"port" cfg:"port"`
+	Hostname         string `flag:"hostname" cfg:"hostname"`
+	AgentCount       int    `flag:"agentCount" cfg:"agent_count"`
+	OfferWaitSeconds int    `flag:"offerWaitSeconds" cfg:"offer_wait_seconds"`
 
-	OfferCount       int `flag:"offerCount" cfg:"offer_count"`
-	OfferWaitSeconds int `flag:"offerWaitSeconds" cfg:"offer_wait_seconds"`
+	address string
 }
 
 func newOptions() *Options {
 	return &Options{
-		OfferCount:       2,
+		IP:               "127.0.0.1",
+		Port:             5050,
+		Hostname:         "localhost",
+		AgentCount:       2,
 		OfferWaitSeconds: 5,
 	}
 }
@@ -38,13 +44,15 @@ func ConfigOptions(config string, flagSet *flag.FlagSet) (*Options, error) {
 
 	options.Resolve(o, flagSet, cfg)
 
-	if o.ListenAddr == "" {
-		return nil, fmt.Errorf("invalid listen address specified: %#v", o.ListenAddr)
+	if net.ParseIP(o.IP) == nil {
+		return nil, fmt.Errorf("invalid listening IP address specified: %s", o.IP)
 	}
 
-	if !strings.Contains(o.ListenAddr, ":") {
-		o.ListenAddr = ":" + o.ListenAddr
+	if o.AgentCount <= 0 {
+		return nil, fmt.Errorf("agent count must be positive")
 	}
+
+	o.address = fmt.Sprintf("%s:%d", o.IP, o.Port)
 
 	return o, nil
 }
