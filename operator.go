@@ -43,6 +43,7 @@ func Operator(state *MasterState) http.Handler {
 func operatorCallMux(state *MasterState, call *master.Call) (*master.Response, error) {
 	callTypeHandlers := map[master.Call_Type]func(*master.Call, *MasterState) (*master.Response, error){
 		master.Call_GET_AGENTS: getAgents,
+		master.Call_GET_TASKS:  getTasks,
 	}
 
 	if call.Type == master.Call_UNKNOWN {
@@ -81,6 +82,30 @@ func getAgents(call *master.Call, state *MasterState) (*master.Response, error) 
 		Type: master.Response_GET_AGENTS,
 		GetAgents: &master.Response_GetAgents{
 			Agents: agents,
+		},
+	}
+
+	return res, nil
+}
+
+func getTasks(call *master.Call, state *MasterState) (*master.Response, error) {
+	var tasks []mesos.Task
+	for _, task := range state.Tasks {
+		tasks = append(tasks, task)
+	}
+
+	if len(tasks) == 0 {
+		tasks = []mesos.Task{}
+	}
+
+	res := &master.Response{
+		Type: master.Response_GET_TASKS,
+		GetTasks: &master.Response_GetTasks{
+			Tasks:            tasks,
+			CompletedTasks:   []mesos.Task{},
+			OrphanTasks:      []mesos.Task{},
+			PendingTasks:     []mesos.Task{},
+			UnreachableTasks: []mesos.Task{},
 		},
 	}
 
