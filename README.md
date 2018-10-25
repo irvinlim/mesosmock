@@ -6,27 +6,25 @@ The server can be configured to respond or initiate requests based on a configur
 
 ## APIs Supported
 
-The following APIs are currently supported by mesosmock:
+The following APIs are supported currently (or WIP) by `mesosmock`:
 
 - [Scheduler HTTP API (v1)](https://mesos.apache.org/documentation/latest/scheduler-http-api/)
-
-The following are also targeted to be supported by mesosmock:
-
 - [Operator HTTP API (v1)](https://mesos.apache.org/documentation/latest/operator-http-api/)
 - [Master HTTP API](https://mesos.apache.org/documentation/latest/endpoints/)
 
-Older Protobuf APIs (v0) will not be supported.
+Only JSON is supported at the moment. Additionally, the older v0 APIs will not be supported.
 
 ## Usage
 
 ```sh
-./mesosmock -config config.json -listen 5050
+./mesosmock -config=config.json
 ```
-
-### Command-line Options
-
-TODO
 
 ### Configuration
 
 TODO
+
+
+## Development
+
+This project uses [govendor](https://github.com/kardianos/govendor).
