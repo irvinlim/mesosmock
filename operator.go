@@ -63,12 +63,15 @@ func getAgents(call *master.Call, state *MasterState) (*master.Response, error) 
 
 	for i, agentID := range state.AgentIDs {
 		port := int32(5051)
+		pid := fmt.Sprintf("slave(1)@%s:%d", *state.MasterInfo.Address.IP, port)
+
 		agent := master.Response_GetAgents_Agent{
 			AgentInfo: mesos.AgentInfo{
 				ID:       &agentID,
 				Port:     &port,
 				Hostname: fmt.Sprintf("mesos-slave-%d", i),
 			},
+			PID:    &pid,
 			Active: true,
 		}
 		agents = append(agents, agent)
