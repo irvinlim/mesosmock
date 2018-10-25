@@ -183,6 +183,11 @@ func subscribe(call *scheduler.Call, state *MasterState, req schedulerReq) error
 		// Subscription was closed by another subscription
 		log.Printf("Ignoring disconnection for framework %s (%s) as it has already reconnected", info.ID.Value,
 			info.Name)
+
+		// Handle disconnected framework
+		state.DisconnectFramework(*info.ID)
+
+		// Send failover event
 		failover := &scheduler.Event{
 			Type: scheduler.Event_ERROR,
 			Error: &scheduler.Event_Error{
@@ -196,8 +201,9 @@ func subscribe(call *scheduler.Call, state *MasterState, req schedulerReq) error
 		// Subscription was closed by disconnected scheduler connection
 		// TODO: Handle deactivation of frameworks and failover timeouts.
 		log.Printf("Disconnecting framework %s (%s)", info.ID.Value, info.Name)
+		state.DisconnectFramework(*info.ID)
+
 		delete(subscriptions, *info.ID)
-		delete(state.Frameworks, *info.ID)
 	}
 
 	// Clean up stream once closed.

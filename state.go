@@ -66,6 +66,19 @@ func (s MasterState) NewFramework(info *mesos.FrameworkInfo) *FrameworkState {
 	return framework
 }
 
+// DisconnectFramework handles disconnections of a framework from the master.
+func (s MasterState) DisconnectFramework(frameworkID mesos.FrameworkID) {
+	framework, exists := s.Frameworks[frameworkID]
+	if !exists {
+		return
+	}
+
+	// Remove all outstanding offers for the framework.
+	for agentID := range framework.OutstandingOffers {
+		delete(framework.OutstandingOffers, agentID)
+	}
+}
+
 // NewOffer attempts to create a new resource offer for a framework from an agent.
 // If there is an outstanding offer for the same agent + framework, this method returns nil.
 func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.AgentID) *mesos.Offer {
