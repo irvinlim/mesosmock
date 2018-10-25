@@ -14,12 +14,12 @@ type Server struct {
 }
 
 // NewServer creates a new API server for serving Mesos master requests.
-func NewServer(opts *Options) *Server {
+func NewServer(opts *Options, state *MasterState) *Server {
 	httpLogger := log.New(os.Stdout, "http: ", log.LstdFlags)
 
 	router := http.NewServeMux()
-	router.Handle("/api/v1/scheduler", Scheduler(opts))
-	router.Handle("/master/api/v1/scheduler", Scheduler(opts))
+	router.Handle("/api/v1/scheduler", Scheduler(opts, state))
+	router.Handle("/master/api/v1/scheduler", Scheduler(opts, state))
 
 	server := http.Server{
 		Addr:     opts.address,

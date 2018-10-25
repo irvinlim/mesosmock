@@ -21,9 +21,12 @@ func main() {
 		log.Fatalf("ERROR: Could not load config %s: %v", *config, err)
 	}
 
-	InitState(opts)
+	state, err := NewMasterState(opts)
+	if err != nil {
+		log.Fatalf("ERROR: %v", err)
+	}
 
-	server := NewServer(opts)
+	server := NewServer(opts, state)
 
 	log.Printf("Starting server on %s...\n", opts.address)
 	if err := server.ListenAndServe(); err != nil {

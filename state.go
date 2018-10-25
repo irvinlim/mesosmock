@@ -32,12 +32,10 @@ type FrameworkState struct {
 	offerOffset int
 }
 
-// State is the current MasterState of the mesosmock instance.
-var State *MasterState
-
-func InitState(opts *Options) error {
+// NewMasterState initialises a new master state for the mock cluster.
+func NewMasterState(opts *Options) (*MasterState, error) {
 	masterID := uuid.New().String()
-	State = &MasterState{
+	state := &MasterState{
 		MasterInfo: &mesos.MasterInfo{
 			ID: masterID,
 			Address: &mesos.Address{
@@ -53,21 +51,25 @@ func InitState(opts *Options) error {
 		AgentIDs:   generateAgents(masterID, opts.AgentCount),
 	}
 
-	return nil
+	return state, nil
 }
 
-func NewFramework(info *mesos.FrameworkInfo) *FrameworkState {
-	return &FrameworkState{
+// NewFramework creates and adds a new framework to the master.
+func (s MasterState) NewFramework(info *mesos.FrameworkInfo) *FrameworkState {
+	framework := &FrameworkState{
 		FrameworkInfo:     info,
 		OutstandingOffers: make(map[mesos.AgentID]mesos.OfferID),
 		offerOffset:       1,
 	}
+
+	s.Frameworks[*info.ID] = framework
+	return framework
 }
 
 // NewOffer attempts to create a new resource offer for a framework from an agent.
 // If there is an outstanding offer for the same agent + framework, this method returns nil.
-func NewOffer(frameworkID mesos.FrameworkID, agentID mesos.AgentID) *mesos.Offer {
-	frameworkState := State.Frameworks[frameworkID]
+func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.AgentID) *mesos.Offer {
+	frameworkState := s.Frameworks[frameworkID]
 
 	// For simplicity, we assume that every agent only sends one offer each time for all of its (infinite) resources.
 	if _, exists := frameworkState.OutstandingOffers[agentID]; exists {
@@ -90,15 +92,15 @@ func NewOffer(frameworkID mesos.FrameworkID, agentID mesos.AgentID) *mesos.Offer
 		FrameworkID: frameworkID,
 	}
 
-	State.Offers[offerID] = offer
+	s.Offers[offerID] = offer
 	return &offer
 }
 
 // RemoveOffer removes an existing offer, in response to the offer being accepted, declined or rescinded.
-func RemoveOffer(frameworkID mesos.FrameworkID, offerID mesos.OfferID) {
-	if offer, exists := State.Offers[offerID]; exists {
-		delete(State.Frameworks[frameworkID].OutstandingOffers, offer.AgentID)
-		delete(State.Offers, offerID)
+func (s MasterState) RemoveOffer(frameworkID mesos.FrameworkID, offerID mesos.OfferID) {
+	if offer, exists := s.Offers[offerID]; exists {
+		delete(s.Frameworks[frameworkID].OutstandingOffers, offer.AgentID)
+		delete(s.Offers, offerID)
 	}
 }
 
