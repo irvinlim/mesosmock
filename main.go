@@ -13,7 +13,6 @@ func main() {
 	flagSet.String("port", "5050", "port to listen on for HTTP requests")
 	flagSet.String("hostname", "localhost", "hostname for the master")
 	flagSet.Int("agentCount", 1, "number of agents to mock in the cluster")
-	flagSet.String("offerWaitSeconds", "", "duration between each batch of offers sent")
 
 	flagSet.Parse(os.Args[1:])
 

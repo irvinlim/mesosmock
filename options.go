@@ -11,22 +11,20 @@ import (
 // Options for configuration of mesosmock, passed via
 // command-line arguments, or loaded from config file.
 type Options struct {
-	IP               string `flag:"ip" cfg:"ip"`
-	Port             int    `flag:"port" cfg:"port"`
-	Hostname         string `flag:"hostname" cfg:"hostname"`
-	AgentCount       int    `flag:"agentCount" cfg:"agent_count"`
-	OfferWaitSeconds int    `flag:"offerWaitSeconds" cfg:"offer_wait_seconds"`
+	IP         string `flag:"ip" cfg:"ip"`
+	Port       int    `flag:"port" cfg:"port"`
+	Hostname   string `flag:"hostname" cfg:"hostname"`
+	AgentCount int    `flag:"agentCount" cfg:"agent_count"`
 
 	address string
 }
 
 func newOptions() *Options {
 	return &Options{
-		IP:               "127.0.0.1",
-		Port:             5050,
-		Hostname:         "localhost",
-		AgentCount:       2,
-		OfferWaitSeconds: 5,
+		IP:         "127.0.0.1",
+		Port:       5050,
+		Hostname:   "localhost",
+		AgentCount: 2,
 	}
 }
 

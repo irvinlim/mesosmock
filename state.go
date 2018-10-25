@@ -26,7 +26,8 @@ type MasterState struct {
 
 // FrameworkState stores any global information about a single framework registered on the master.
 type FrameworkState struct {
-	FrameworkInfo *mesos.FrameworkInfo
+	FrameworkInfo     *mesos.FrameworkInfo
+	OutstandingOffers map[mesos.AgentID]mesos.OfferID
 
 	offerOffset int
 }
@@ -57,19 +58,47 @@ func InitState(opts *Options) error {
 
 func NewFramework(info *mesos.FrameworkInfo) *FrameworkState {
 	return &FrameworkState{
-		FrameworkInfo: info,
-		offerOffset:   1,
+		FrameworkInfo:     info,
+		OutstandingOffers: make(map[mesos.AgentID]mesos.OfferID),
+		offerOffset:       1,
 	}
 }
 
-func NewOffer(frameworkID mesos.FrameworkID, agentID mesos.AgentID) mesos.Offer {
-	offerID := fmt.Sprintf("%s-O%d", frameworkID.Value, State.Frameworks[frameworkID].offerOffset)
-	State.Frameworks[frameworkID].offerOffset += 1
+// NewOffer attempts to create a new resource offer for a framework from an agent.
+// If there is an outstanding offer for the same agent + framework, this method returns nil.
+func NewOffer(frameworkID mesos.FrameworkID, agentID mesos.AgentID) *mesos.Offer {
+	frameworkState := State.Frameworks[frameworkID]
 
-	return mesos.Offer{
-		ID:          mesos.OfferID{Value: offerID},
+	// For simplicity, we assume that every agent only sends one offer each time for all of its (infinite) resources.
+	if _, exists := frameworkState.OutstandingOffers[agentID]; exists {
+		return nil
+	}
+
+	// Create new offer ID.
+	offerIDString := fmt.Sprintf("%s-O%d", frameworkID.Value, frameworkState.offerOffset)
+	offerID := mesos.OfferID{Value: offerIDString}
+
+	// Add offer as outstanding offer for agent to this framework.
+	frameworkState.OutstandingOffers[agentID] = offerID
+
+	// Increment offer offset for framework.
+	frameworkState.offerOffset += 1
+
+	offer := mesos.Offer{
+		ID:          offerID,
 		AgentID:     agentID,
 		FrameworkID: frameworkID,
+	}
+
+	State.Offers[offerID] = offer
+	return &offer
+}
+
+// RemoveOffer removes an existing offer, in response to the offer being accepted, declined or rescinded.
+func RemoveOffer(frameworkID mesos.FrameworkID, offerID mesos.OfferID) {
+	if offer, exists := State.Offers[offerID]; exists {
+		delete(State.Frameworks[frameworkID].OutstandingOffers, offer.AgentID)
+		delete(State.Offers, offerID)
 	}
 }
 

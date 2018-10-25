@@ -191,11 +191,13 @@ func subscribe(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *ht
 
 func decline(opts *Options, call *scheduler.Call, w http.ResponseWriter, r *http.Request) error {
 	framework := State.Frameworks[*call.FrameworkID]
+	info := framework.FrameworkInfo
+
 	log.Printf("Processing DECLINE call for offers: %s for framework %s (%s)", call.Decline.OfferIDs,
-		framework.FrameworkInfo.ID.Value, framework.FrameworkInfo.Name)
+		info.ID.Value, info.Name)
 
 	for _, offerID := range call.Decline.OfferIDs {
-		delete(State.Offers, offerID)
+		RemoveOffer(*info.ID, offerID)
 		log.Printf("Removing offer %s", offerID.Value)
 	}
 
@@ -229,25 +231,26 @@ func sendResourceOffers(opts *Options, streamID StreamID) {
 		var offersToSend []mesos.Offer
 
 		for _, agentID := range State.AgentIDs {
-			offerID := mesos.OfferID{Value: uuid.New().String()}
-			offer := NewOffer(*framework.FrameworkInfo.ID, agentID)
-
-			State.Offers[offerID] = offer
-			offersToSend = append(offersToSend, offer)
+			if offer := NewOffer(*framework.FrameworkInfo.ID, agentID); offer != nil {
+				offersToSend = append(offersToSend, *offer)
+			}
 		}
 
-		event := &scheduler.Event{
-			Type: scheduler.Event_OFFERS,
-			Offers: &scheduler.Event_Offers{
-				Offers: offersToSend,
-			},
+		if len(offersToSend) > 0 {
+			event := &scheduler.Event{
+				Type: scheduler.Event_OFFERS,
+				Offers: &scheduler.Event_Offers{
+					Offers: offersToSend,
+				},
+			}
+
+			log.Printf("Sending %d offers to framework %s (%s)", len(offersToSend), framework.FrameworkInfo.ID.Value,
+				framework.FrameworkInfo.Name)
+			sendEvent(streamID, event)
 		}
 
-		log.Printf("Sending %d offers to framework %s (%s)", len(offersToSend), framework.FrameworkInfo.ID.Value,
-			framework.FrameworkInfo.Name)
-		sendEvent(streamID, event)
-
-		time.Sleep(time.Duration(opts.OfferWaitSeconds) * time.Second)
+		// Attempt to send resource offers for all agents every second.
+		time.Sleep(1 * time.Second)
 	}
 }
 
