@@ -62,7 +62,7 @@ func Scheduler(opts *Options, state *MasterState) http.Handler {
 			return
 		}
 
-		err = callMux(req)
+		err = schedulerCallMux(req)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(w, "Failed to validate scheduler::Call: %#v", err)
@@ -71,7 +71,7 @@ func Scheduler(opts *Options, state *MasterState) http.Handler {
 	})
 }
 
-func callMux(req schedulerReq) error {
+func schedulerCallMux(req schedulerReq) error {
 	callTypeHandlers := map[scheduler.Call_Type]func(*scheduler.Call, *MasterState, schedulerReq) error{
 		scheduler.Call_SUBSCRIBE: subscribe,
 		scheduler.Call_DECLINE:   decline,
