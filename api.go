@@ -20,6 +20,8 @@ func NewServer(opts *Options, state *MasterState) *Server {
 	router := http.NewServeMux()
 	router.Handle("/api/v1", Operator(state))
 	router.Handle("/master/api/v1", Operator(state))
+	router.Handle("/api/v1/operator", Operator(state))
+	router.Handle("/master/api/v1/operator", Operator(state))
 	router.Handle("/api/v1/scheduler", Scheduler(opts, state))
 	router.Handle("/master/api/v1/scheduler", Scheduler(opts, state))
 
