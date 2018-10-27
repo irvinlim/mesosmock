@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-
 	"github.com/google/uuid"
 	"github.com/mesos/mesos-go/api/v1/lib"
 )
@@ -26,10 +25,10 @@ type MasterState struct {
 
 // FrameworkState stores any global information about a single framework registered on the master.
 type FrameworkState struct {
-	FrameworkInfo     *mesos.FrameworkInfo
-	OutstandingOffers map[mesos.AgentID]mesos.OfferID
+	FrameworkInfo *mesos.FrameworkInfo
 
-	offerOffset int
+	offerOffset       int
+	outstandingOffers map[mesos.AgentID]mesos.OfferID
 }
 
 // NewMasterState initialises a new master state for the mock cluster.
@@ -58,7 +57,7 @@ func NewMasterState(opts *Options) (*MasterState, error) {
 func (s MasterState) NewFramework(info *mesos.FrameworkInfo) *FrameworkState {
 	framework := &FrameworkState{
 		FrameworkInfo:     info,
-		OutstandingOffers: make(map[mesos.AgentID]mesos.OfferID),
+		outstandingOffers: make(map[mesos.AgentID]mesos.OfferID),
 		offerOffset:       1,
 	}
 
@@ -74,8 +73,8 @@ func (s MasterState) DisconnectFramework(frameworkID mesos.FrameworkID) {
 	}
 
 	// Remove all outstanding offers for the framework.
-	for agentID := range framework.OutstandingOffers {
-		delete(framework.OutstandingOffers, agentID)
+	for agentID := range framework.outstandingOffers {
+		delete(framework.outstandingOffers, agentID)
 	}
 }
 
@@ -85,7 +84,7 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 	frameworkState := s.Frameworks[frameworkID]
 
 	// For simplicity, we assume that every agent only sends one offer each time for all of its (infinite) resources.
-	if _, exists := frameworkState.OutstandingOffers[agentID]; exists {
+	if _, exists := frameworkState.outstandingOffers[agentID]; exists {
 		return nil
 	}
 
@@ -94,7 +93,7 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 	offerID := mesos.OfferID{Value: offerIDString}
 
 	// Add offer as outstanding offer for agent to this framework.
-	frameworkState.OutstandingOffers[agentID] = offerID
+	frameworkState.outstandingOffers[agentID] = offerID
 
 	// Increment offer offset for framework.
 	frameworkState.offerOffset += 1
@@ -112,7 +111,7 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 // RemoveOffer removes an existing offer, in response to the offer being accepted, declined or rescinded.
 func (s MasterState) RemoveOffer(frameworkID mesos.FrameworkID, offerID mesos.OfferID) {
 	if offer, exists := s.Offers[offerID]; exists {
-		delete(s.Frameworks[frameworkID].OutstandingOffers, offer.AgentID)
+		delete(s.Frameworks[frameworkID].outstandingOffers, offer.AgentID)
 		delete(s.Offers, offerID)
 	}
 }
