@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/irvinlim/mesosmock/internal/pkg/stream"
+	"github.com/irvinlim/mesosmock/pkg/stream"
 	"github.com/mesos/mesos-go/api/v1/lib"
 	"github.com/mesos/mesos-go/api/v1/lib/scheduler"
 )
