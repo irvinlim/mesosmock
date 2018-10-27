@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/irvinlim/mesosmock/internal/pkg/stream"
 	"log"
 	"net/http"
 	"strconv"
@@ -11,15 +12,14 @@ import (
 
 	"github.com/mesos/mesos-go/api/v1/lib"
 	"github.com/mesos/mesos-go/api/v1/lib/master"
-	"github.com/mesos/mesos-go/api/v1/lib/recordio"
 )
 
 type operatorSubscription struct {
-	streamID   StreamID
+	streamID   stream.ID
 	writeFrame chan<- []byte
 }
 
-var operatorSubscriptions = make(map[StreamID]operatorSubscription)
+var operatorSubscriptions = make(map[stream.ID]operatorSubscription)
 
 func Operator(state *MasterState) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -76,14 +76,8 @@ func operatorCallMux(state *MasterState, call *master.Call, w http.ResponseWrite
 }
 
 func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		panic("expected http.ResponseWriter to be an http.Flusher")
-	}
-	writer := recordio.NewWriter(w)
-
 	// Create subscription
-	streamID := newStreamID()
+	streamID := stream.NewStreamID()
 	readFrame := make(chan []byte)
 	sub := operatorSubscription{
 		streamID:   streamID,
@@ -93,7 +87,9 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 	// Add subscription
 	log.Printf("Added subscriber %s from the list of active subscribers", streamID)
 	operatorSubscriptions[streamID] = sub
+
 	ctx := r.Context()
+	writer := stream.NewWriter(w).WithContext(ctx)
 
 	// Event consumer, write to HTTP output buffer
 	go func() {
@@ -107,15 +103,6 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 				}
 
 				writer.WriteFrame(frame)
-			}
-
-			// In case Context is cancelled between writing frame and flushing,
-			// check if the context's Done channel was written to.
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				flusher.Flush()
 			}
 		}
 	}()
@@ -151,7 +138,7 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 func (s operatorSubscription) sendHeartbeat(ctx context.Context) {
 	for {
 		select {
-		case <-time.After(0 * time.Second):
+		case <-time.After(15 * time.Second):
 			event := &master.Event{Type: master.Event_HEARTBEAT}
 			s.sendEvent(event)
 		case <-ctx.Done():

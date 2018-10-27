@@ -3,16 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/mesos/mesos-go/api/v1/lib"
-	"github.com/mesos/mesos-go/api/v1/lib/recordio"
-	"github.com/mesos/mesos-go/api/v1/lib/scheduler"
 	"log"
 	"net/http"
 	"time"
-)
 
-type StreamID = uuid.UUID
+	"github.com/irvinlim/mesosmock/internal/pkg/stream"
+	"github.com/mesos/mesos-go/api/v1/lib"
+	"github.com/mesos/mesos-go/api/v1/lib/scheduler"
+)
 
 type schedulerReq struct {
 	opts  *Options
@@ -23,24 +21,15 @@ type schedulerReq struct {
 	request        *http.Request
 }
 
-func newStreamID() StreamID {
-	streamID, err := uuid.NewUUID()
-	if err != nil {
-		log.Panicf("Cannot create new stream ID: %s", err)
-	}
-
-	return streamID
-}
-
 type subscription struct {
-	streamID    StreamID
+	streamID    stream.ID
 	frameworkID mesos.FrameworkID
 
 	write  chan<- []byte
 	closed chan struct{}
 }
 
-var streams = make(map[StreamID]subscription)
+var streams = make(map[stream.ID]subscription)
 var subscriptions = make(map[mesos.FrameworkID]subscription)
 
 // Scheduler returns a http.Handler for providing the Mesos Scheduler HTTP API:
@@ -94,13 +83,7 @@ func subscribe(call *scheduler.Call, state *MasterState, req schedulerReq) error
 	r := req.request
 	w := req.responseWriter
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		panic("expected http.ResponseWriter to be an http.Flusher")
-	}
-
-	writer := recordio.NewWriter(w)
-	streamID := newStreamID()
+	streamID := stream.NewStreamID()
 
 	id := call.FrameworkID
 	info := call.Subscribe.FrameworkInfo
@@ -142,16 +125,22 @@ func subscribe(call *scheduler.Call, state *MasterState, req schedulerReq) error
 		closeOld <- struct{}{}
 	}
 
+	ctx := r.Context()
+	writer := stream.NewWriter(w).WithContext(ctx)
+
 	// Event consumer, write to HTTP output buffer
 	go func() {
 		for {
-			frame, ok := <-write
-			if !ok {
-				break
-			}
+			select {
+			case <-ctx.Done():
+				return
+			case frame, ok := <-write:
+				if !ok {
+					return
+				}
 
-			writer.WriteFrame(frame)
-			flusher.Flush()
+				writer.WriteFrame(frame)
+			}
 		}
 	}()
 
@@ -207,7 +196,6 @@ func subscribe(call *scheduler.Call, state *MasterState, req schedulerReq) error
 	}
 
 	// Clean up stream once closed.
-	close(sub.write)
 	close(sub.closed)
 	delete(streams, streamID)
 
@@ -229,7 +217,7 @@ func decline(call *scheduler.Call, state *MasterState, req schedulerReq) error {
 	return nil
 }
 
-func sendHeartbeat(streamID StreamID) {
+func sendHeartbeat(streamID stream.ID) {
 	for {
 		if _, exists := streams[streamID]; !exists {
 			break
@@ -244,14 +232,14 @@ func sendHeartbeat(streamID StreamID) {
 	}
 }
 
-func sendResourceOffers(state *MasterState, streamID StreamID) {
+func sendResourceOffers(state *MasterState, streamID stream.ID) {
 	for {
-		stream, exists := streams[streamID]
+		s, exists := streams[streamID]
 		if !exists {
 			break
 		}
 
-		framework := state.Frameworks[stream.frameworkID]
+		framework := state.Frameworks[s.frameworkID]
 
 		var offersToSend []mesos.Offer
 
@@ -279,13 +267,13 @@ func sendResourceOffers(state *MasterState, streamID StreamID) {
 	}
 }
 
-func sendEvent(streamID StreamID, event *scheduler.Event) {
+func sendEvent(streamID stream.ID, event *scheduler.Event) {
 	frame, err := event.MarshalJSON()
 	if err != nil {
 		log.Panicf("Cannot marshal JSON for %s event: %s", event.Type.String(), err)
 	}
 
-	if stream, exists := streams[streamID]; exists {
-		stream.write <- frame
+	if s, exists := streams[streamID]; exists {
+		s.write <- frame
 	}
 }
