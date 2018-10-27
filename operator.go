@@ -19,8 +19,6 @@ type operatorSubscription struct {
 	writeFrame chan<- []byte
 }
 
-var operatorSubscriptions = make(map[stream.ID]operatorSubscription)
-
 func Operator(state *MasterState) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		call := &master.Call{}
@@ -86,7 +84,6 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 
 	// Add subscription
 	log.Printf("Added subscriber %s from the list of active subscribers", streamID)
-	operatorSubscriptions[streamID] = sub
 
 	ctx := r.Context()
 	writer := stream.NewWriter(w).WithContext(ctx)
@@ -128,8 +125,6 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 	// Automatically cancels all downstream Contexts if request is cancelled
 	<-ctx.Done()
 
-	// Remove subscription when connection is closed
-	delete(operatorSubscriptions, streamID)
 	log.Printf("Removed subscriber %s from the list of active subscribers", streamID)
 
 	return nil

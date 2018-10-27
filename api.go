@@ -22,8 +22,8 @@ func NewServer(opts *Options, state *MasterState) *Server {
 	router.Handle("/master/api/v1", Operator(state))
 	router.Handle("/api/v1/operator", Operator(state))
 	router.Handle("/master/api/v1/operator", Operator(state))
-	router.Handle("/api/v1/scheduler", Scheduler(opts, state))
-	router.Handle("/master/api/v1/scheduler", Scheduler(opts, state))
+	router.Handle("/api/v1/scheduler", Scheduler(state))
+	router.Handle("/master/api/v1/scheduler", Scheduler(state))
 
 	server := http.Server{
 		Addr:     opts.address,
