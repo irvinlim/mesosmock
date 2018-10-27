@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/irvinlim/mesosmock/pkg/api"
 	"github.com/irvinlim/mesosmock/pkg/config"
 	"github.com/irvinlim/mesosmock/pkg/state"
 )
@@ -19,20 +20,20 @@ func main() {
 
 	flagSet.Parse(os.Args[1:])
 
-	opts, err := config.ConfigOptions(*configFile, flagSet)
+	opts, err := config.NewOptions(*configFile, flagSet)
 	if err != nil {
-		log.Fatalf("ERROR: Could not load config %s: %v", *configFile, err)
+		log.Fatalf("ERROR: Could not load config %s: %s", *configFile, err)
 	}
 
 	s, err := state.NewMasterState(opts)
 	if err != nil {
-		log.Fatalf("ERROR: %v", err)
+		log.Fatalf("ERROR: %s", err)
 	}
 
-	server := NewServer(opts, s)
+	server := api.NewServer(opts, s)
 
 	log.Printf("Starting server on %s...\n", opts.GetAddress())
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("Could not listen on %s: %v\n", opts.GetAddress(), err)
+		log.Fatalf("Could not listen on %s: %s\n", opts.GetAddress(), err)
 	}
 }

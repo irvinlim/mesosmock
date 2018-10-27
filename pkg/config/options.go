@@ -3,9 +3,10 @@ package config
 import (
 	"flag"
 	"fmt"
+	"net"
+
 	"github.com/BurntSushi/toml"
 	"github.com/mreiferson/go-options"
-	"net"
 )
 
 // Options for configuration of mesosmock, passed via
@@ -26,9 +27,9 @@ func newOptions() *Options {
 	}
 }
 
-// ConfigOptions parses a TOML config file, resolves it with the command-line flags
+// NewOptions parses a TOML config file, resolves it with the command-line flags
 // and validates/processes the options.
-func ConfigOptions(config string, flagSet *flag.FlagSet) (*Options, error) {
+func NewOptions(config string, flagSet *flag.FlagSet) (*Options, error) {
 	o := newOptions()
 	cfg := map[string]interface{}{}
 
