@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/irvinlim/mesosmock/pkg/config"
 	"log"
 	"net/http"
 	"os"
@@ -14,7 +15,7 @@ type Server struct {
 }
 
 // NewServer creates a new API server for serving Mesos master requests.
-func NewServer(opts *Options, state *MasterState) *Server {
+func NewServer(opts *config.Options, state *MasterState) *Server {
 	httpLogger := log.New(os.Stdout, "http: ", log.LstdFlags)
 
 	router := http.NewServeMux()
@@ -26,14 +27,14 @@ func NewServer(opts *Options, state *MasterState) *Server {
 	router.Handle("/master/api/v1/scheduler", Scheduler(state))
 
 	server := http.Server{
-		Addr:     opts.address,
+		Addr:     opts.GetAddress(),
 		Handler:  logging(httpLogger)(validateReq()(router)),
 		ErrorLog: httpLogger,
 	}
 
 	Server := &Server{
 		server:     &server,
-		listenAddr: opts.address,
+		listenAddr: opts.GetAddress(),
 	}
 
 	return Server

@@ -4,11 +4,13 @@ import (
 	"flag"
 	"log"
 	"os"
+
+	"github.com/irvinlim/mesosmock/pkg/config"
 )
 
 func main() {
 	flagSet := flag.NewFlagSet("mesosmock", flag.ExitOnError)
-	config := flagSet.String("config", "", "path to config.json")
+	configFile := flagSet.String("config", "", "path to config.json")
 	flagSet.String("ip", "127.0.0.1", "IP address to listen on for HTTP requests")
 	flagSet.String("port", "5050", "port to listen on for HTTP requests")
 	flagSet.String("hostname", "localhost", "hostname for the master")
@@ -16,9 +18,9 @@ func main() {
 
 	flagSet.Parse(os.Args[1:])
 
-	opts, err := ConfigOptions(*config, flagSet)
+	opts, err := config.ConfigOptions(*configFile, flagSet)
 	if err != nil {
-		log.Fatalf("ERROR: Could not load config %s: %v", *config, err)
+		log.Fatalf("ERROR: Could not load config %s: %v", *configFile, err)
 	}
 
 	state, err := NewMasterState(opts)
@@ -28,8 +30,8 @@ func main() {
 
 	server := NewServer(opts, state)
 
-	log.Printf("Starting server on %s...\n", opts.address)
+	log.Printf("Starting server on %s...\n", opts.GetAddress())
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("Could not listen on %s: %v\n", opts.address, err)
+		log.Fatalf("Could not listen on %s: %v\n", opts.GetAddress(), err)
 	}
 }

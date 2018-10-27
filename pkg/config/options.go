@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"flag"
@@ -15,8 +15,6 @@ type Options struct {
 	Port       int    `flag:"port" cfg:"port"`
 	Hostname   string `flag:"hostname" cfg:"hostname"`
 	AgentCount int    `flag:"agentCount" cfg:"agent_count"`
-
-	address string
 }
 
 func newOptions() *Options {
@@ -50,7 +48,9 @@ func ConfigOptions(config string, flagSet *flag.FlagSet) (*Options, error) {
 		return nil, fmt.Errorf("agent count must be positive")
 	}
 
-	o.address = fmt.Sprintf("%s:%d", o.IP, o.Port)
-
 	return o, nil
+}
+
+func (o Options) GetAddress() string {
+	return fmt.Sprintf("%s:%d", o.IP, o.Port)
 }

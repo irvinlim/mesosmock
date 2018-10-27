@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
+	"github.com/irvinlim/mesosmock/pkg/config"
 	"github.com/mesos/mesos-go/api/v1/lib"
 )
 
@@ -35,7 +36,7 @@ type FrameworkState struct {
 }
 
 // NewMasterState initialises a new master state for the mock cluster.
-func NewMasterState(opts *Options) (*MasterState, error) {
+func NewMasterState(opts *config.Options) (*MasterState, error) {
 	masterID := uuid.New().String()
 	state := &MasterState{
 		MasterInfo: &mesos.MasterInfo{
