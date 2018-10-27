@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/irvinlim/mesosmock/internal/pkg/stream"
+	"github.com/mesos/mesos-go/api/v1/lib"
+	"github.com/mesos/mesos-go/api/v1/lib/master"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
-
-	"github.com/mesos/mesos-go/api/v1/lib"
-	"github.com/mesos/mesos-go/api/v1/lib/master"
 )
 
 type operatorSubscription struct {
@@ -108,9 +107,6 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 		}
 	}()
 
-	// Mock event producers, as if this is the master of a real Mesos cluster
-	go sub.sendHeartbeat(ctx)
-
 	// Create SUBSCRIBED event
 	heartbeat := float64(15)
 	event := &master.Event{
@@ -121,6 +117,9 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 	}
 	sub.sendEvent(event)
 
+	// Mock event producers, as if this is the master of a real Mesos cluster
+	go sub.sendHeartbeat(ctx)
+
 	// Automatically cancels all downstream Contexts if request is cancelled
 	<-ctx.Done()
 
@@ -130,13 +129,14 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s operatorSubscription) sendHeartbeat(ctx context.Context) {
+	event := &master.Event{Type: master.Event_HEARTBEAT}
 	for {
+		s.sendEvent(event)
+
 		select {
-		case <-time.After(15 * time.Second):
-			event := &master.Event{Type: master.Event_HEARTBEAT}
-			s.sendEvent(event)
 		case <-ctx.Done():
 			return
+		case <-time.After(15 * time.Second):
 		}
 	}
 }
@@ -180,7 +180,7 @@ func getAgents(call *master.Call, state *MasterState) *master.Response {
 
 func getTasks(call *master.Call, state *MasterState) *master.Response {
 	var tasks []mesos.Task
-	for _, task := range state.Tasks {
+	for _, task := range state.GetTasks() {
 		tasks = append(tasks, task)
 	}
 

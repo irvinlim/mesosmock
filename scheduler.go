@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -97,6 +98,7 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 	w.Header().Set("Mesos-Stream-Id", streamID.String())
 	w.WriteHeader(http.StatusOK)
 
+	// TODO: Allow frameworks to subscribe without specifying framework ID.
 	id := call.FrameworkID
 	info := call.Subscribe.FrameworkInfo
 	log.Printf("Received subscription request for HTTP framework '%s'", info.Name)
@@ -115,7 +117,7 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 	}
 
 	// Initialise framework
-	if _, exists := state.Frameworks[*info.ID]; !exists {
+	if _, exists := state.GetFramework(*info.ID); !exists {
 		log.Printf("Adding framework %s", info.ID.Value)
 		state.NewFramework(info)
 	}
@@ -157,10 +159,6 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 		}
 	}()
 
-	// Mock event producers, as if this is the master of a real Mesos cluster
-	go sub.sendHeartbeat(streamID)
-	go sub.sendResourceOffers(state, streamID)
-
 	// Create SUBSCRIBED event
 	heartbeat := float64(15)
 	event := &scheduler.Event{
@@ -170,7 +168,11 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 			HeartbeatIntervalSeconds: &heartbeat,
 		},
 	}
-	sub.sendEvent(streamID, event)
+	sub.sendEvent(event)
+
+	// Mock event producers, as if this is the master of a real Mesos cluster
+	go sub.sendHeartbeat(ctx)
+	go sub.sendResourceOffers(ctx, state)
 
 	// Block until subscription is closed either by the current client, or by another request.
 	select {
@@ -207,7 +209,11 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 }
 
 func decline(call *scheduler.Call, state *MasterState) (*scheduler.Response, error) {
-	framework := state.Frameworks[*call.FrameworkID]
+	framework, exists := state.GetFramework(*call.FrameworkID)
+	if !exists {
+		return nil, fmt.Errorf("framework does not exist: %s", call.FrameworkID.Value)
+	}
+
 	info := framework.FrameworkInfo
 
 	log.Printf("Processing DECLINE call for offers: %s for framework %s (%s)", call.Decline.OfferIDs,
@@ -221,20 +227,26 @@ func decline(call *scheduler.Call, state *MasterState) (*scheduler.Response, err
 	return nil, nil
 }
 
-func (s schedulerSubscription) sendHeartbeat(streamID stream.ID) {
-	for {
-		event := &scheduler.Event{
-			Type: scheduler.Event_HEARTBEAT,
-		}
-		s.sendEvent(streamID, event)
+func (s schedulerSubscription) sendHeartbeat(ctx context.Context) {
+	event := &scheduler.Event{Type: scheduler.Event_HEARTBEAT}
 
-		time.Sleep(15 * time.Second)
+	for {
+		s.sendEvent(event)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(15 * time.Second):
+		}
 	}
 }
 
-func (s schedulerSubscription) sendResourceOffers(state *MasterState, streamID stream.ID) {
+func (s schedulerSubscription) sendResourceOffers(ctx context.Context, state *MasterState) {
 	for {
-		framework := state.Frameworks[s.frameworkID]
+		framework, exists := state.GetFramework(s.frameworkID)
+		if !exists {
+			return
+		}
 
 		var offersToSend []mesos.Offer
 
@@ -252,9 +264,15 @@ func (s schedulerSubscription) sendResourceOffers(state *MasterState, streamID s
 				},
 			}
 
-			log.Printf("Sending %d offers to framework %s (%s)", len(offersToSend), framework.FrameworkInfo.ID.Value,
-				framework.FrameworkInfo.Name)
-			s.sendEvent(streamID, event)
+			log.Printf("Sending %d offers to framework %s (%s)", len(offersToSend),
+				framework.FrameworkInfo.ID.Value, framework.FrameworkInfo.Name)
+			s.sendEvent(event)
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(1 * time.Second):
 		}
 
 		// Attempt to send resource offers for all agents every second.
@@ -262,7 +280,7 @@ func (s schedulerSubscription) sendResourceOffers(state *MasterState, streamID s
 	}
 }
 
-func (s schedulerSubscription) sendEvent(streamID stream.ID, event *scheduler.Event) {
+func (s schedulerSubscription) sendEvent(event *scheduler.Event) {
 	frame, err := event.MarshalJSON()
 	if err != nil {
 		log.Panicf("Cannot marshal JSON for %s event: %s", event.Type.String(), err)
