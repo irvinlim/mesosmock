@@ -74,8 +74,12 @@ func operatorCallMux(state *MasterState, call *master.Call, w http.ResponseWrite
 }
 
 func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
-	// Create subscription
 	streamID := stream.NewStreamID()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	// Create subscription
 	readFrame := make(chan []byte)
 	sub := operatorSubscription{
 		streamID:   streamID,
@@ -106,11 +110,6 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 
 	// Mock event producers, as if this is the master of a real Mesos cluster
 	go sub.sendHeartbeat(ctx)
-
-	// Send headers
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Mesos-Stream-Id", streamID.String())
-	w.WriteHeader(http.StatusOK)
 
 	// Create SUBSCRIBED event
 	heartbeat := float64(15)

@@ -93,6 +93,10 @@ func schedulerCallMux(call *scheduler.Call, state *MasterState, w http.ResponseW
 func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.ResponseWriter, r *http.Request) error {
 	streamID := stream.NewStreamID()
 
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Mesos-Stream-Id", streamID.String())
+	w.WriteHeader(http.StatusOK)
+
 	id := call.FrameworkID
 	info := call.Subscribe.FrameworkInfo
 	log.Printf("Received subscription request for HTTP framework '%s'", info.Name)
@@ -132,6 +136,8 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 		closeOld <- struct{}{}
 	}
 
+	log.Printf("Added framework %s", info.ID.Value)
+
 	ctx := r.Context()
 	writer := stream.NewWriter(w).WithContext(ctx)
 
@@ -154,13 +160,6 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 	// Mock event producers, as if this is the master of a real Mesos cluster
 	go sub.sendHeartbeat(streamID)
 	go sub.sendResourceOffers(state, streamID)
-
-	log.Printf("Added framework %s", info.ID.Value)
-
-	// Send headers
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Mesos-Stream-Id", streamID.String())
-	w.WriteHeader(http.StatusOK)
 
 	// Create SUBSCRIBED event
 	heartbeat := float64(15)
