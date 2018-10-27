@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/irvinlim/mesosmock/pkg/config"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/irvinlim/mesosmock/pkg/config"
+	"github.com/irvinlim/mesosmock/pkg/state"
 )
 
 // Server creates a Mesos master server for serving HTTP requests.
@@ -15,26 +17,26 @@ type Server struct {
 }
 
 // NewServer creates a new API server for serving Mesos master requests.
-func NewServer(opts *config.Options, state *MasterState) *Server {
+func NewServer(o *config.Options, s *state.MasterState) *Server {
 	httpLogger := log.New(os.Stdout, "http: ", log.LstdFlags)
 
 	router := http.NewServeMux()
-	router.Handle("/api/v1", Operator(state))
-	router.Handle("/master/api/v1", Operator(state))
-	router.Handle("/api/v1/operator", Operator(state))
-	router.Handle("/master/api/v1/operator", Operator(state))
-	router.Handle("/api/v1/scheduler", Scheduler(state))
-	router.Handle("/master/api/v1/scheduler", Scheduler(state))
+	router.Handle("/api/v1", Operator(s))
+	router.Handle("/master/api/v1", Operator(s))
+	router.Handle("/api/v1/operator", Operator(s))
+	router.Handle("/master/api/v1/operator", Operator(s))
+	router.Handle("/api/v1/scheduler", Scheduler(s))
+	router.Handle("/master/api/v1/scheduler", Scheduler(s))
 
 	server := http.Server{
-		Addr:     opts.GetAddress(),
+		Addr:     o.GetAddress(),
 		Handler:  logging(httpLogger)(validateReq()(router)),
 		ErrorLog: httpLogger,
 	}
 
 	Server := &Server{
 		server:     &server,
-		listenAddr: opts.GetAddress(),
+		listenAddr: o.GetAddress(),
 	}
 
 	return Server

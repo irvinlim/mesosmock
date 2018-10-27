@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/irvinlim/mesosmock/pkg/state"
 	"github.com/irvinlim/mesosmock/pkg/stream"
 	"github.com/mesos/mesos-go/api/v1/lib"
 	"github.com/mesos/mesos-go/api/v1/lib/scheduler"
@@ -26,7 +27,7 @@ var schedulerSubscriptions = make(map[mesos.FrameworkID]schedulerSubscription)
 
 // Scheduler returns a http.Handler for providing the Mesos Scheduler HTTP API:
 // https://mesos.apache.org/documentation/latest/scheduler-http-api/
-func Scheduler(state *MasterState) http.Handler {
+func Scheduler(st *state.MasterState) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		call := &scheduler.Call{}
 
@@ -37,7 +38,7 @@ func Scheduler(state *MasterState) http.Handler {
 			return
 		}
 
-		err = schedulerCallMux(call, state, w, r)
+		err = schedulerCallMux(call, st, w, r)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(w, "Failed to validate scheduler::Call: %s", err)
@@ -46,18 +47,18 @@ func Scheduler(state *MasterState) http.Handler {
 	})
 }
 
-func schedulerCallMux(call *scheduler.Call, state *MasterState, w http.ResponseWriter, r *http.Request) error {
+func schedulerCallMux(call *scheduler.Call, st *state.MasterState, w http.ResponseWriter, r *http.Request) error {
 	if call.Type == scheduler.Call_UNKNOWN {
 		return fmt.Errorf("expecting 'type' to be present")
 	}
 
 	// Handle SUBSCRIBE calls differently
 	if call.Type == scheduler.Call_SUBSCRIBE {
-		return schedulerSubscribe(call, state, w, r)
+		return schedulerSubscribe(call, st, w, r)
 	}
 
 	// Invoke handler for different call types
-	callTypeHandlers := map[scheduler.Call_Type]func(*scheduler.Call, *MasterState) (*scheduler.Response, error){
+	callTypeHandlers := map[scheduler.Call_Type]func(*scheduler.Call, *state.MasterState) (*scheduler.Response, error){
 		scheduler.Call_DECLINE: decline,
 	}
 
@@ -66,7 +67,7 @@ func schedulerCallMux(call *scheduler.Call, state *MasterState, w http.ResponseW
 		return fmt.Errorf("handler for '%s' call not implemented", call.Type.Enum().String())
 	}
 
-	res, err := handler(call, state)
+	res, err := handler(call, st)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 	} else {
@@ -91,7 +92,7 @@ func schedulerCallMux(call *scheduler.Call, state *MasterState, w http.ResponseW
 	return nil
 }
 
-func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.ResponseWriter, r *http.Request) error {
+func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.ResponseWriter, r *http.Request) error {
 	streamID := stream.NewStreamID()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -117,9 +118,9 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 	}
 
 	// Initialise framework
-	if _, exists := state.GetFramework(*info.ID); !exists {
+	if _, exists := st.GetFramework(*info.ID); !exists {
 		log.Printf("Adding framework %s", info.ID.Value)
-		state.NewFramework(info)
+		st.NewFramework(info)
 	}
 
 	// Subscribe framework
@@ -172,7 +173,7 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 
 	// Mock event producers, as if this is the master of a real Mesos cluster
 	go sub.sendHeartbeat(ctx)
-	go sub.sendResourceOffers(ctx, state)
+	go sub.sendResourceOffers(ctx, st)
 
 	// Block until subscription is closed either by the current client, or by another request.
 	select {
@@ -182,7 +183,7 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 			info.Name)
 
 		// Handle disconnected framework
-		state.DisconnectFramework(*info.ID)
+		st.DisconnectFramework(*info.ID)
 
 		// Send failover event
 		failover := &scheduler.Event{
@@ -198,7 +199,7 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 		// Subscription was closed by disconnected scheduler connection
 		// TODO: Handle deactivation of frameworks and failover timeouts.
 		log.Printf("Disconnecting framework %s (%s)", info.ID.Value, info.Name)
-		state.DisconnectFramework(*info.ID)
+		st.DisconnectFramework(*info.ID)
 
 		delete(schedulerSubscriptions, *info.ID)
 	}
@@ -208,8 +209,8 @@ func schedulerSubscribe(call *scheduler.Call, state *MasterState, w http.Respons
 	return nil
 }
 
-func decline(call *scheduler.Call, state *MasterState) (*scheduler.Response, error) {
-	framework, exists := state.GetFramework(*call.FrameworkID)
+func decline(call *scheduler.Call, st *state.MasterState) (*scheduler.Response, error) {
+	framework, exists := st.GetFramework(*call.FrameworkID)
 	if !exists {
 		return nil, fmt.Errorf("framework does not exist: %s", call.FrameworkID.Value)
 	}
@@ -220,7 +221,7 @@ func decline(call *scheduler.Call, state *MasterState) (*scheduler.Response, err
 		info.ID.Value, info.Name)
 
 	for _, offerID := range call.Decline.OfferIDs {
-		state.RemoveOffer(*info.ID, offerID)
+		st.RemoveOffer(*info.ID, offerID)
 		log.Printf("Removing offer %s", offerID.Value)
 	}
 
@@ -241,17 +242,17 @@ func (s schedulerSubscription) sendHeartbeat(ctx context.Context) {
 	}
 }
 
-func (s schedulerSubscription) sendResourceOffers(ctx context.Context, state *MasterState) {
+func (s schedulerSubscription) sendResourceOffers(ctx context.Context, st *state.MasterState) {
 	for {
-		framework, exists := state.GetFramework(s.frameworkID)
+		framework, exists := st.GetFramework(s.frameworkID)
 		if !exists {
 			return
 		}
 
 		var offersToSend []mesos.Offer
 
-		for _, agentID := range state.AgentIDs {
-			if offer := state.NewOffer(*framework.FrameworkInfo.ID, agentID); offer != nil {
+		for _, agentID := range st.AgentIDs {
+			if offer := st.NewOffer(*framework.FrameworkInfo.ID, agentID); offer != nil {
 				offersToSend = append(offersToSend, *offer)
 			}
 		}

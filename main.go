@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/irvinlim/mesosmock/pkg/config"
+	"github.com/irvinlim/mesosmock/pkg/state"
 )
 
 func main() {
@@ -23,12 +24,12 @@ func main() {
 		log.Fatalf("ERROR: Could not load config %s: %v", *configFile, err)
 	}
 
-	state, err := NewMasterState(opts)
+	s, err := state.NewMasterState(opts)
 	if err != nil {
 		log.Fatalf("ERROR: %v", err)
 	}
 
-	server := NewServer(opts, state)
+	server := NewServer(opts, s)
 
 	log.Printf("Starting server on %s...\n", opts.GetAddress())
 	if err := server.ListenAndServe(); err != nil {
