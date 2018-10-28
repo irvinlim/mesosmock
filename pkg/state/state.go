@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/irvinlim/mesosmock/pkg/config"
@@ -33,6 +34,12 @@ type FrameworkState struct {
 
 	offerOffset       uint64
 	outstandingOffers *sync.Map
+	refusedAgents     *sync.Map
+}
+
+type refusedAgent struct {
+	mesos.AgentID
+	expiry time.Time
 }
 
 // NewMasterState initialises a new master state for the mock cluster.
@@ -61,8 +68,9 @@ func NewMasterState(opts *config.Options) (*MasterState, error) {
 func (s MasterState) NewFramework(info *mesos.FrameworkInfo) *FrameworkState {
 	framework := &FrameworkState{
 		FrameworkInfo:     info,
-		outstandingOffers: new(sync.Map),
 		offerOffset:       0,
+		outstandingOffers: new(sync.Map),
+		refusedAgents:     new(sync.Map),
 	}
 
 	s.Frameworks.Store(*info.ID, framework)
@@ -96,6 +104,14 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 		return nil
 	}
 
+	// Do not create a new offer if agent is refused within the specified duration.
+	if r, exists := frameworkState.refusedAgents.Load(agentID); exists {
+		if !r.(refusedAgent).expiry.Before(time.Now()) {
+			return nil
+		}
+		frameworkState.refusedAgents.Delete(agentID)
+	}
+
 	// Create new offer ID.
 	offset := atomic.LoadUint64(&frameworkState.offerOffset)
 	offerIDString := fmt.Sprintf("%s-O%d", frameworkID.Value, offset)
@@ -118,11 +134,14 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 }
 
 // RemoveOffer removes an existing offer, in response to the offer being accepted, declined or rescinded.
-func (s MasterState) RemoveOffer(frameworkID mesos.FrameworkID, offerID mesos.OfferID) {
+func (s MasterState) RemoveOffer(frameworkID mesos.FrameworkID, offerID mesos.OfferID, refuseDuration time.Duration) {
 	if offer, exists := s.GetOffer(offerID); exists {
 		if framework, exists := s.GetFramework(frameworkID); exists {
 			framework.outstandingOffers.Delete(offer.AgentID)
 			s.Offers.Delete(offerID)
+
+			refusedAgent := refusedAgent{offer.AgentID, time.Now().Add(refuseDuration)}
+			framework.refusedAgents.Store(offer.AgentID, refusedAgent)
 		}
 	}
 }

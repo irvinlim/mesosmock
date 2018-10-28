@@ -221,7 +221,14 @@ func decline(call *scheduler.Call, st *state.MasterState) (*scheduler.Response, 
 		info.ID.Value, info.Name)
 
 	for _, offerID := range call.Decline.OfferIDs {
-		st.RemoveOffer(*info.ID, offerID)
+		// Refuse seconds defaults to 5 seconds:
+		// https://github.com/apache/mesos/blob/5b8f632e75d3c20be172c1678c04f77ae18cda1a/include/mesos/mesos.proto#L2577
+		refuseDuration := time.Duration(5 * time.Second)
+		if call.Decline.Filters.RefuseSeconds != nil {
+			refuseDuration = time.Duration(*call.Decline.Filters.RefuseSeconds * float64(time.Second))
+		}
+
+		st.RemoveOffer(*info.ID, offerID, refuseDuration)
 		log.Printf("Removing offer %s", offerID.Value)
 	}
 
