@@ -275,9 +275,6 @@ func (s schedulerSubscription) sendResourceOffers(ctx context.Context, st *state
 			return
 		case <-time.After(1 * time.Second):
 		}
-
-		// Attempt to send resource offers for all agents every second.
-		time.Sleep(1 * time.Second)
 	}
 }
 
