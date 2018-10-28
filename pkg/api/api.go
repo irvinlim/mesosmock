@@ -51,7 +51,7 @@ func (s Server) ListenAndServe() error {
 	}
 
 	log.Printf("Starting server on %s...\n", listener.Addr())
-	return http.Serve(listener, nil)
+	return http.Serve(listener, s.server.Handler)
 }
 
 func logging(logger *log.Logger) func(http.Handler) http.Handler {
