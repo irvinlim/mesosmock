@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 
 	"github.com/irvinlim/mesosmock/pkg/config"
@@ -31,7 +32,7 @@ func NewServer(o *config.Options, s *state.MasterState) *Server {
 
 	server := http.Server{
 		Addr:     o.GetAddress(),
-		Handler:  logging(httpLogger)(validateReq()(router)),
+		Handler:  logging(httpLogger)(profiling(validateReq(router))),
 		ErrorLog: httpLogger,
 	}
 
@@ -54,6 +55,15 @@ func (s Server) ListenAndServe() error {
 	return http.Serve(listener, s.server.Handler)
 }
 
+func profiling(next http.Handler) http.Handler {
+	// Expose pprof endpoints
+	router := http.NewServeMux()
+	router.HandleFunc("/debug/pprof/", pprof.Index)
+
+	router.Handle("/", next)
+	return router
+}
+
 func logging(logger *log.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -64,42 +74,40 @@ func logging(logger *log.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-func validateReq() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != "POST" {
-				w.Header().Set("Allow", "POST")
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				fmt.Fprintf(w, "Expecting one of { 'POST' }, but received '%s'", r.Method)
-				return
-			}
+func validateReq(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.Header().Set("Allow", "POST")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			fmt.Fprintf(w, "Expecting one of { 'POST' }, but received '%s'", r.Method)
+			return
+		}
 
-			contentType := r.Header.Get("Content-Type")
-			if contentType == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				fmt.Fprint(w, "Expecting 'Content-Type' to be present")
-				return
-			}
+		contentType := r.Header.Get("Content-Type")
+		if contentType == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, "Expecting 'Content-Type' to be present")
+			return
+		}
 
-			switch contentType {
-			case
-				"application/json",
-				"application/x-protobuf":
-			default:
-				w.WriteHeader(http.StatusUnsupportedMediaType)
-				fmt.Fprint(w, "Expecting 'Content-Type' of application/json or application/x-protobuf")
-				return
-			}
+		switch contentType {
+		case
+			"application/json",
+			"application/x-protobuf":
+		default:
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			fmt.Fprint(w, "Expecting 'Content-Type' of application/json or application/x-protobuf")
+			return
+		}
 
-			// Protobuf API is not supported in mesosmock.
-			if contentType == "application/x-protobuf" {
-				w.WriteHeader(http.StatusUnsupportedMediaType)
-				fmt.Fprint(w, "Protobuf API is not supported in mesosmock")
-				return
-			}
+		// Protobuf API is not supported in mesosmock.
+		if contentType == "application/x-protobuf" {
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			fmt.Fprint(w, "Protobuf API is not supported in mesosmock")
+			return
+		}
 
-			// Otherwise, pass request to be handled by the next middleware.
-			next.ServeHTTP(w, r)
-		})
-	}
+		// Otherwise, pass request to be handled by the next middleware.
+		next.ServeHTTP(w, r)
+	})
 }
