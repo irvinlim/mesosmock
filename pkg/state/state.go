@@ -62,7 +62,7 @@ func (s MasterState) NewFramework(info *mesos.FrameworkInfo) *FrameworkState {
 	framework := &FrameworkState{
 		FrameworkInfo:     info,
 		outstandingOffers: new(sync.Map),
-		offerOffset:       1,
+		offerOffset:       0,
 	}
 
 	s.Frameworks.Store(*info.ID, framework)
