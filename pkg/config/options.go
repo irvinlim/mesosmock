@@ -1,51 +1,52 @@
 package config
 
 import (
-	"flag"
 	"fmt"
 	"net"
 
 	"github.com/BurntSushi/toml"
-	"github.com/mreiferson/go-options"
 )
 
-// Options for configuration of mesosmock, passed via
-// command-line arguments, or loaded from config file.
+// Options for configuration of mesosmock loaded from a config file.
 type Options struct {
-	IP         string `flag:"ip" cfg:"ip"`
-	Port       int    `flag:"port" cfg:"port"`
-	Hostname   string `flag:"hostname" cfg:"hostname"`
-	AgentCount int    `flag:"agentCount" cfg:"agent_count"`
+	IP       string
+	Port     int
+	Hostname string
+	Mesos    *mesosOptions
+}
+
+type mesosOptions struct {
+	AgentCount int `toml:"agent_count"`
 }
 
 func newOptions() *Options {
 	return &Options{
-		IP:         "127.0.0.1",
-		Port:       5050,
-		Hostname:   "localhost",
-		AgentCount: 2,
+		IP:       "127.0.0.1",
+		Port:     5050,
+		Hostname: "localhost",
+		Mesos: &mesosOptions{
+			AgentCount: 1,
+		},
 	}
 }
 
-// NewOptions parses a TOML config file, resolves it with the command-line flags
-// and validates/processes the options.
-func NewOptions(config string, flagSet *flag.FlagSet) (*Options, error) {
+// NewOptions parses command-line arguments and a TOML config file,
+// producing a new Options struct.
+func NewOptions(configFile string) (*Options, error) {
 	o := newOptions()
-	cfg := map[string]interface{}{}
 
-	if config != "" {
-		if _, err := toml.DecodeFile(config, &cfg); err != nil {
+	// Parse TOML config
+	if configFile != "" {
+		if _, err := toml.DecodeFile(configFile, &o); err != nil {
 			return nil, err
 		}
 	}
 
-	options.Resolve(o, flagSet, cfg)
-
+	// Validate options values
 	if net.ParseIP(o.IP) == nil {
 		return nil, fmt.Errorf("invalid listening IP address specified: %s", o.IP)
 	}
-
-	if o.AgentCount <= 0 {
+	if o.Mesos.AgentCount <= 0 {
 		return nil, fmt.Errorf("agent count must be positive")
 	}
 

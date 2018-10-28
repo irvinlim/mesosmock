@@ -7,10 +7,12 @@
 # ip = "127.0.0.1"
 
 # Port to listen on.
-# port = "5050"
+# port = 5050
 
 # Hostname to use for the Mesos master.
 # hostname = "localhost"
 
 # Mesos mock cluster configuration.
-# agent_count = 2
+[mesos]
+  # Number of agents to simulate in the cluster.
+  # agent_count = 2

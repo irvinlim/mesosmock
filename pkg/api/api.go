@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 
@@ -44,7 +45,13 @@ func NewServer(o *config.Options, s *state.MasterState) *Server {
 
 // ListenAndServe starts the API server on the configured address.
 func (s Server) ListenAndServe() error {
-	return s.server.ListenAndServe()
+	listener, err := net.Listen("tcp", s.listenAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("Starting server on %s...\n", listener.Addr())
+	return http.Serve(listener, nil)
 }
 
 func logging(logger *log.Logger) func(http.Handler) http.Handler {

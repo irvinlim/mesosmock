@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"os"
 
 	"github.com/irvinlim/mesosmock/pkg/api"
 	"github.com/irvinlim/mesosmock/pkg/config"
@@ -11,18 +10,12 @@ import (
 )
 
 func main() {
-	flagSet := flag.NewFlagSet("mesosmock", flag.ExitOnError)
-	configFile := flagSet.String("config", "", "path to config.json")
-	flagSet.String("ip", "127.0.0.1", "IP address to listen on for HTTP requests")
-	flagSet.String("port", "5050", "port to listen on for HTTP requests")
-	flagSet.String("hostname", "localhost", "hostname for the master")
-	flagSet.Int("agentCount", 1, "number of agents to mock in the cluster")
+	configFile := flag.String("config", "", "path to config.json")
+	flag.Parse()
 
-	flagSet.Parse(os.Args[1:])
-
-	opts, err := config.NewOptions(*configFile, flagSet)
+	opts, err := config.NewOptions(*configFile)
 	if err != nil {
-		log.Fatalf("ERROR: Could not load config %s: %s", *configFile, err)
+		log.Fatalf("ERROR: Could not create config: %s", err)
 	}
 
 	s, err := state.NewMasterState(opts)
@@ -31,9 +24,7 @@ func main() {
 	}
 
 	server := api.NewServer(opts, s)
-
-	log.Printf("Starting server on %s...\n", opts.GetAddress())
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("Could not listen on %s: %s\n", opts.GetAddress(), err)
+		log.Fatalf("Could not start server: %s", err)
 	}
 }

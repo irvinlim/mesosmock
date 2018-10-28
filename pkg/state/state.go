@@ -51,7 +51,7 @@ func NewMasterState(opts *config.Options) (*MasterState, error) {
 		Frameworks: new(sync.Map),
 		Tasks:      new(sync.Map),
 		Offers:     new(sync.Map),
-		AgentIDs:   generateAgents(masterID, opts.AgentCount),
+		AgentIDs:   generateAgents(masterID, opts.Mesos.AgentCount),
 	}
 
 	return state, nil
