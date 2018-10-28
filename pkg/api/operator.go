@@ -46,11 +46,12 @@ func operatorCallMux(st *state.MasterState, call *master.Call, w http.ResponseWr
 
 	// Handle SUBSCRIBE calls differently
 	if call.Type == master.Call_SUBSCRIBE {
-		return operatorSubscribe(w, r)
+		return operatorSubscribe(st, call, w, r)
 	}
 
 	// Invoke handler for different call types
 	callTypeHandlers := map[master.Call_Type]func(*master.Call, *state.MasterState) *master.Response{
+		master.Call_GET_STATE:  getState,
 		master.Call_GET_AGENTS: getAgents,
 		master.Call_GET_TASKS:  getTasks,
 	}
@@ -74,7 +75,7 @@ func operatorCallMux(st *state.MasterState, call *master.Call, w http.ResponseWr
 	return nil
 }
 
-func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
+func operatorSubscribe(st *state.MasterState, call *master.Call, w http.ResponseWriter, r *http.Request) error {
 	streamID := stream.NewStreamID()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -114,6 +115,7 @@ func operatorSubscribe(w http.ResponseWriter, r *http.Request) error {
 	event := &master.Event{
 		Type: master.Event_SUBSCRIBED,
 		Subscribed: &master.Event_Subscribed{
+			GetState:                 getState(call, st).GetState,
 			HeartbeatIntervalSeconds: &heartbeat,
 		},
 	}
@@ -149,6 +151,18 @@ func (s operatorSubscription) sendEvent(event *master.Event) {
 		log.Panicf("Cannot marshal JSON for %s event: %s", event.Type.String(), err)
 	}
 	s.writeFrame <- frame
+}
+
+func getState(call *master.Call, st *state.MasterState) *master.Response {
+	res := &master.Response{
+		Type: master.Response_GET_STATE,
+		GetState: &master.Response_GetState{
+			GetAgents: getAgents(call, st).GetAgents,
+			GetTasks:  getTasks(call, st).GetTasks,
+		},
+	}
+
+	return res
 }
 
 func getAgents(call *master.Call, st *state.MasterState) *master.Response {
