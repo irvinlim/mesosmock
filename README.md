@@ -24,7 +24,14 @@ Only JSON is supported at the moment. Additionally, the older v0 APIs will not b
 
 TODO
 
-
 ## Development
 
 This project uses [govendor](https://github.com/kardianos/govendor).
+
+### Linux
+
+To build for Linux (64-bit):
+
+```
+env GOOS=linux GOARCH=arm64 go build -v .
+```

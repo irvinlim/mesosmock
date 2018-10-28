@@ -31,7 +31,7 @@ type MasterState struct {
 type FrameworkState struct {
 	FrameworkInfo *mesos.FrameworkInfo
 
-	offerOffset       int64
+	offerOffset       uint64
 	outstandingOffers *sync.Map
 }
 
@@ -97,14 +97,15 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 	}
 
 	// Create new offer ID.
-	offerIDString := fmt.Sprintf("%s-O%d", frameworkID.Value, frameworkState.offerOffset)
+	offset := atomic.LoadUint64(&frameworkState.offerOffset)
+	offerIDString := fmt.Sprintf("%s-O%d", frameworkID.Value, offset)
 	offerID := mesos.OfferID{Value: offerIDString}
 
 	// Add offer as outstanding offer for agent to this framework.
 	frameworkState.outstandingOffers.Store(agentID, offerID)
 
 	// Increment offer offset for framework.
-	atomic.AddInt64(&frameworkState.offerOffset, 1)
+	atomic.AddUint64(&frameworkState.offerOffset, 1)
 
 	offer := &mesos.Offer{
 		ID:          offerID,
