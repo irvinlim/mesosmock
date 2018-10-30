@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/irvinlim/mesosmock/pkg/stream"
 	"github.com/mesos/mesos-go/api/v1/lib"
 	"github.com/mesos/mesos-go/api/v1/lib/scheduler"
+	log "github.com/sirupsen/logrus"
 )
 
 type schedulerSubscription struct {
@@ -102,7 +102,7 @@ func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.Resp
 	// TODO: Allow frameworks to subscribe without specifying framework ID.
 	id := call.FrameworkID
 	info := call.Subscribe.FrameworkInfo
-	log.Printf("Received subscription request for HTTP framework '%s'", info.Name)
+	log.Infof("Received subscription request for HTTP framework '%s'", info.Name)
 
 	var closeOld chan struct{}
 	if id != nil {
@@ -119,12 +119,12 @@ func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.Resp
 
 	// Initialise framework
 	if _, exists := st.GetFramework(*info.ID); !exists {
-		log.Printf("Adding framework %s", info.ID.Value)
+		log.Infof("Adding framework %s", info.ID.Value)
 		st.NewFramework(info)
 	}
 
 	// Subscribe framework
-	log.Printf("Subscribing framework '%s'", info.Name)
+	log.Infof("Subscribing framework '%s'", info.Name)
 	write := make(chan []byte)
 	sub := schedulerSubscription{
 		streamID:    streamID,
@@ -135,11 +135,11 @@ func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.Resp
 	schedulerSubscriptions[*info.ID] = sub
 
 	if closeOld != nil {
-		log.Printf("Disconnecting old subscription")
+		log.Infof("Disconnecting old subscription")
 		closeOld <- struct{}{}
 	}
 
-	log.Printf("Added framework %s", info.ID.Value)
+	log.Infof("Added framework %s", info.ID.Value)
 
 	ctx := r.Context()
 	writer := stream.NewWriter(w).WithContext(ctx)
@@ -179,7 +179,7 @@ func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.Resp
 	select {
 	case <-sub.closed:
 		// Subscription was closed by another subscription
-		log.Printf("Ignoring disconnection for framework %s (%s) as it has already reconnected", info.ID.Value,
+		log.Infof("Ignoring disconnection for framework %s (%s) as it has already reconnected", info.ID.Value,
 			info.Name)
 
 		// Handle disconnected framework
@@ -198,7 +198,7 @@ func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.Resp
 	case <-r.Context().Done():
 		// Subscription was closed by disconnected scheduler connection
 		// TODO: Handle deactivation of frameworks and failover timeouts.
-		log.Printf("Disconnecting framework %s (%s)", info.ID.Value, info.Name)
+		log.Infof("Disconnecting framework %s (%s)", info.ID.Value, info.Name)
 		st.DisconnectFramework(*info.ID)
 
 		delete(schedulerSubscriptions, *info.ID)
@@ -217,7 +217,7 @@ func decline(call *scheduler.Call, st *state.MasterState) (*scheduler.Response, 
 
 	info := framework.FrameworkInfo
 
-	log.Printf("Processing DECLINE call for offers: %s for framework %s (%s)", call.Decline.OfferIDs,
+	log.Debugf("Processing DECLINE call for offers: %s for framework %s (%s)", call.Decline.OfferIDs,
 		info.ID.Value, info.Name)
 
 	for _, offerID := range call.Decline.OfferIDs {
@@ -229,7 +229,7 @@ func decline(call *scheduler.Call, st *state.MasterState) (*scheduler.Response, 
 		}
 
 		st.RemoveOffer(*info.ID, offerID, refuseDuration)
-		log.Printf("Removing offer %s", offerID.Value)
+		log.Debugf("Removing offer %s", offerID.Value)
 	}
 
 	return nil, nil
@@ -272,7 +272,7 @@ func (s schedulerSubscription) sendResourceOffers(ctx context.Context, st *state
 				},
 			}
 
-			log.Printf("Sending %d offers to framework %s (%s)", len(offersToSend),
+			log.Debugf("Sending %d offers to framework %s (%s)", len(offersToSend),
 				framework.FrameworkInfo.ID.Value, framework.FrameworkInfo.Name)
 			s.sendEvent(event)
 		}

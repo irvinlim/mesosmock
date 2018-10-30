@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/irvinlim/mesosmock/pkg/stream"
 	"github.com/mesos/mesos-go/api/v1/lib"
 	"github.com/mesos/mesos-go/api/v1/lib/master"
+	log "github.com/sirupsen/logrus"
 )
 
 type operatorSubscription struct {
@@ -42,7 +42,7 @@ func operatorCallMux(st *state.MasterState, call *master.Call, w http.ResponseWr
 		return fmt.Errorf("expecting 'type' to be present")
 	}
 
-	log.Printf("Processing call %s", call.Type.Enum().String())
+	log.Infof("Processing call %s", call.Type.Enum().String())
 
 	// Handle SUBSCRIBE calls differently
 	if call.Type == master.Call_SUBSCRIBE {
@@ -89,7 +89,7 @@ func operatorSubscribe(st *state.MasterState, call *master.Call, w http.Response
 	}
 
 	// Add subscription
-	log.Printf("Added subscriber %s from the list of active subscribers", streamID)
+	log.Infof("Added subscriber %s from the list of active subscribers", streamID)
 
 	ctx := r.Context()
 	writer := stream.NewWriter(w).WithContext(ctx)
@@ -127,7 +127,7 @@ func operatorSubscribe(st *state.MasterState, call *master.Call, w http.Response
 	// Automatically cancels all downstream Contexts if request is cancelled
 	<-ctx.Done()
 
-	log.Printf("Removed subscriber %s from the list of active subscribers", streamID)
+	log.Infof("Removed subscriber %s from the list of active subscribers", streamID)
 
 	return nil
 }

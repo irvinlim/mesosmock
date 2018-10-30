@@ -6,10 +6,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
-	"os"
 
 	"github.com/irvinlim/mesosmock/pkg/config"
 	"github.com/irvinlim/mesosmock/pkg/state"
+	logger "github.com/sirupsen/logrus"
 )
 
 // Server creates a Mesos master server for serving HTTP requests.
@@ -20,7 +20,8 @@ type Server struct {
 
 // NewServer creates a new API server for serving Mesos master requests.
 func NewServer(o *config.Options, s *state.MasterState) *Server {
-	httpLogger := log.New(os.Stdout, "http: ", log.LstdFlags)
+	httpLogger := logger.New()
+	logW := log.New(httpLogger.Writer(), "", 0)
 
 	router := http.NewServeMux()
 	router.Handle("/api/v1", Operator(s))
@@ -32,8 +33,8 @@ func NewServer(o *config.Options, s *state.MasterState) *Server {
 
 	server := http.Server{
 		Addr:     o.GetAddress(),
-		Handler:  logging(httpLogger)(profiling(validateReq(router))),
-		ErrorLog: httpLogger,
+		Handler:  logging(logW)(profiling(validateReq(router))),
+		ErrorLog: logW,
 	}
 
 	Server := &Server{
@@ -51,7 +52,7 @@ func (s Server) ListenAndServe() error {
 		log.Fatal(err)
 	}
 
-	log.Printf("Starting server on %s...\n", listener.Addr())
+	logger.Infof("Starting server on %s...\n", listener.Addr())
 	return http.Serve(listener, s.server.Handler)
 }
 

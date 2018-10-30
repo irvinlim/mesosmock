@@ -1,9 +1,8 @@
 package stream
 
 import (
-	"log"
-
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 // ID is a unique identifier for a stream.
