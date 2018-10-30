@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/irvinlim/mesosmock/pkg/config"
 	"github.com/mesos/mesos-go/api/v1/lib"
+	"github.com/mesos/mesos-go/api/v1/lib/master"
+	log "github.com/sirupsen/logrus"
 )
 
 // MasterState stores any global information about the mock Mesos cluster and master.
@@ -24,8 +26,10 @@ type MasterState struct {
 	// Offers sent to frameworks that are not yet accepted or declined.
 	Offers *sync.Map
 
-	// AgentIDs store a list of generated agent IDs.
-	AgentIDs []mesos.AgentID
+	// Agents store a list of generated Mesos agents.
+	Agents *sync.Map
+
+	agentOffset uint64
 }
 
 // FrameworkState stores any global information about a single framework registered on the master.
@@ -36,6 +40,9 @@ type FrameworkState struct {
 	outstandingOffers *sync.Map
 	refusedAgents     *sync.Map
 }
+
+// AgentState stores information about a single agent registered on the master.
+type AgentState = master.Response_GetAgents_Agent
 
 type refusedAgent struct {
 	mesos.AgentID
@@ -58,10 +65,26 @@ func NewMasterState(opts *config.Options) (*MasterState, error) {
 		Frameworks: new(sync.Map),
 		Tasks:      new(sync.Map),
 		Offers:     new(sync.Map),
-		AgentIDs:   generateAgents(masterID, opts.Mesos.AgentCount),
+		Agents:     new(sync.Map),
+
+		agentOffset: 0,
+	}
+
+	if err := state.initState(opts); err != nil {
+		return nil, err
 	}
 
 	return state, nil
+}
+
+func (s MasterState) initState(opts *config.Options) error {
+	// Generate an initial number of agents.
+	for i := 0; i < opts.Mesos.AgentCount; i++ {
+		agent := s.NewAgent()
+		log.Debugf("Created new agent %s", agent.AgentInfo.ID.Value)
+	}
+
+	return nil
 }
 
 // NewFramework creates and adds a new framework to the master.
@@ -146,15 +169,26 @@ func (s MasterState) RemoveOffer(frameworkID mesos.FrameworkID, offerID mesos.Of
 	}
 }
 
-func generateAgents(masterID string, agentCount int) []mesos.AgentID {
-	var agentIDs []mesos.AgentID
-	for i := 0; i < agentCount; i++ {
-		agentIDs = append(agentIDs, mesos.AgentID{
-			Value: fmt.Sprintf("%s-S%d", masterID, i),
-		})
+func (s MasterState) NewAgent() *AgentState {
+	// Atomically increment counter, actual value is before increment
+	offset := atomic.AddUint64(&s.agentOffset, 1)
+
+	agentID := mesos.AgentID{Value: fmt.Sprintf("%s-S%d", s.MasterInfo.ID, offset-1)}
+	port := int32(5051)
+	pid := fmt.Sprintf("slave(1)@%s:%d", *s.MasterInfo.Address.IP, port)
+
+	agent := &AgentState{
+		AgentInfo: mesos.AgentInfo{
+			ID:       &agentID,
+			Port:     &port,
+			Hostname: fmt.Sprintf("mesos-slave-%d", offset-1),
+		},
+		PID:    &pid,
+		Active: true,
 	}
 
-	return agentIDs
+	s.Agents.Store(agentID, agent)
+	return agent
 }
 
 func (s MasterState) GetFramework(frameworkID mesos.FrameworkID) (*FrameworkState, bool) {
@@ -192,4 +226,24 @@ func (s MasterState) GetOffer(offerID mesos.OfferID) (*mesos.Offer, bool) {
 	}
 
 	return offer.(*mesos.Offer), true
+}
+
+func (s MasterState) GetAgents() []AgentState {
+	var agents []AgentState
+	s.Agents.Range(func(agentID interface{}, agent interface{}) bool {
+		agents = append(agents, *agent.(*AgentState))
+		return true
+	})
+
+	return agents
+}
+
+func (s MasterState) GetAgentIDs() []mesos.AgentID {
+	var agents []mesos.AgentID
+	s.Agents.Range(func(agentID interface{}, agent interface{}) bool {
+		agents = append(agents, *agent.(*AgentState).AgentInfo.ID)
+		return true
+	})
+
+	return agents
 }

@@ -166,28 +166,10 @@ func getState(call *master.Call, st *state.MasterState) *master.Response {
 }
 
 func getAgents(call *master.Call, st *state.MasterState) *master.Response {
-	var agents []master.Response_GetAgents_Agent
-
-	for i, agentID := range st.AgentIDs {
-		port := int32(5051)
-		pid := fmt.Sprintf("slave(1)@%s:%d", *st.MasterInfo.Address.IP, port)
-
-		agent := master.Response_GetAgents_Agent{
-			AgentInfo: mesos.AgentInfo{
-				ID:       &agentID,
-				Port:     &port,
-				Hostname: fmt.Sprintf("mesos-slave-%d", i),
-			},
-			PID:    &pid,
-			Active: true,
-		}
-		agents = append(agents, agent)
-	}
-
 	res := &master.Response{
 		Type: master.Response_GET_AGENTS,
 		GetAgents: &master.Response_GetAgents{
-			Agents: agents,
+			Agents: st.GetAgents(),
 		},
 	}
 

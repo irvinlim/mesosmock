@@ -258,7 +258,7 @@ func (s schedulerSubscription) sendResourceOffers(ctx context.Context, st *state
 
 		var offersToSend []mesos.Offer
 
-		for _, agentID := range st.AgentIDs {
+		for _, agentID := range st.GetAgentIDs() {
 			if offer := st.NewOffer(*framework.FrameworkInfo.ID, agentID); offer != nil {
 				offersToSend = append(offersToSend, *offer)
 			}
@@ -286,6 +286,8 @@ func (s schedulerSubscription) sendResourceOffers(ctx context.Context, st *state
 }
 
 func (s schedulerSubscription) sendEvent(event *scheduler.Event) {
+	log.Tracef("Sending %s event to framework %s", event.Type, s.frameworkID.Value)
+
 	frame, err := event.MarshalJSON()
 	if err != nil {
 		log.Panicf("Cannot marshal JSON for %s event: %s", event.Type.String(), err)
