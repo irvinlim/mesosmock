@@ -51,6 +51,12 @@
 			"revisionTime": "2018-09-17T14:00:05Z"
 		},
 		{
+			"checksumSHA1": "r6ZMyP/HsdeToXIxvgP3ntL6Bds=",
+			"path": "github.com/konsorten/go-windows-terminal-sequences",
+			"revision": "5c8c8bd35d3832f5d134ae1e1e375b69a4d25242",
+			"revisionTime": "2018-10-04T22:41:46Z"
+		},
+		{
 			"checksumSHA1": "bKMZjd2wPw13VwoE7mBeSv5djFA=",
 			"path": "github.com/matttproud/golang_protobuf_extensions/pbutil",
 			"revision": "c12348ce28de40eed0136aa2b644d0ee0650e56c",
@@ -154,6 +160,12 @@
 			"revisionTime": "2018-01-30T19:37:22Z"
 		},
 		{
+			"checksumSHA1": "fORB+l4g/pyiEjVI0lZZ56qN30I=",
+			"path": "github.com/sirupsen/logrus",
+			"revision": "566a5f690849162ff53cf98f3c42135389d63f95",
+			"revisionTime": "2018-10-29T06:08:39Z"
+		},
+		{
 			"checksumSHA1": "BBudH/js1dNI/nEfTwsAYUo9l2M=",
 			"path": "github.com/stretchr/objx",
 			"revision": "ef50b0de28773081167c97fc27cf29a0bf8b8c71",
@@ -172,10 +184,28 @@
 			"revisionTime": "2018-10-09T18:43:15Z"
 		},
 		{
+			"checksumSHA1": "BGm8lKZmvJbf/YOJLeL1rw2WVjA=",
+			"path": "golang.org/x/crypto/ssh/terminal",
+			"revision": "e84da0312774c21d64ee2317962ef669b27ffb41",
+			"revisionTime": "2018-10-24T13:26:30Z"
+		},
+		{
 			"checksumSHA1": "GtamqiJoL7PGHsN454AoffBFMa8=",
 			"path": "golang.org/x/net/context",
 			"revision": "9b4f9f5ad5197c79fd623a3638e70d8b26cef344",
 			"revisionTime": "2018-10-23T11:20:58Z"
+		},
+		{
+			"checksumSHA1": "jj/eU15RpGLEwyueuTzsS0r5ONw=",
+			"path": "golang.org/x/sys/unix",
+			"revision": "95b1ffbd15a57cc5abb3f04402b9e8ec0016a52c",
+			"revisionTime": "2018-10-26T08:28:59Z"
+		},
+		{
+			"checksumSHA1": "Y7nctMxT58lRM78VtElPerhcnEs=",
+			"path": "golang.org/x/sys/windows",
+			"revision": "95b1ffbd15a57cc5abb3f04402b9e8ec0016a52c",
+			"revisionTime": "2018-10-26T08:28:59Z"
 		}
 	],
 	"rootPath": "github.com/irvinlim/mesosmock"
