@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/irvinlim/mesosmock/pkg/state"
 	"github.com/irvinlim/mesosmock/pkg/stream"
 	"github.com/mesos/mesos-go/api/v1/lib"
@@ -93,6 +94,7 @@ func schedulerCallMux(call *scheduler.Call, st *state.MasterState, w http.Respon
 }
 
 func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.ResponseWriter, r *http.Request) error {
+	var closeOld chan struct{}
 	streamID := stream.NewStreamID()
 
 	// Validate SUBSCRIBE call
@@ -105,25 +107,26 @@ func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.Resp
 		return fmt.Errorf("missing required fields: subscribe.framework_info.user, subscribe.framework_info.name")
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Mesos-Stream-Id", streamID.String())
-	w.WriteHeader(http.StatusOK)
-
-	// TODO: Allow frameworks to subscribe without specifying framework ID.
-	id := call.FrameworkID
 	log.Infof("Received subscription request for HTTP framework '%s'", info.Name)
 
-	var closeOld chan struct{}
-	if id != nil {
-		if id.Value != info.ID.Value {
-			return fmt.Errorf("'framework_id' differs from 'subscribe.framework_info.id'")
+	// Generate a random framework ID if not specified
+	if info.ID == nil {
+		newID := &mesos.FrameworkID{Value: fmt.Sprintf("%s-0000", uuid.New().String())}
+		info.ID = newID
+		if call.FrameworkID == nil {
+			call.FrameworkID = newID
 		}
+	}
 
-		// Check if framework already has an existing subscription, and close it.
-		// See https://mesos.apache.org/documentation/latest/scheduler-http-api/#disconnections
-		if subscription, exists := schedulerSubscriptions[*info.ID]; exists {
-			closeOld = subscription.closed
-		}
+	id := call.FrameworkID
+	if id == nil || id.Value != info.ID.Value {
+		return fmt.Errorf("'framework_id' differs from 'subscribe.framework_info.id'")
+	}
+
+	// Check if framework already has an existing subscription, and close it.
+	// See https://mesos.apache.org/documentation/latest/scheduler-http-api/#disconnections
+	if subscription, exists := schedulerSubscriptions[*info.ID]; exists {
+		closeOld = subscription.closed
 	}
 
 	// Initialise framework
@@ -149,6 +152,11 @@ func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.Resp
 	}
 
 	log.Infof("Added framework %s", info.ID.Value)
+
+	// Begin writing to HTTP output buffer
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Mesos-Stream-Id", streamID.String())
+	w.WriteHeader(http.StatusOK)
 
 	ctx := r.Context()
 	writer := stream.NewWriter(w).WithContext(ctx)
