@@ -10,6 +10,8 @@ import (
 )
 
 func main() {
+	log.SetFormatter(&log.TextFormatter{ForceColors: true})
+
 	configFile := flag.String("config", "", "path to config.json")
 	logLevel := flag.String("logLevel", "debug", "log level: panic,fatal,error,warn,info,debug,trace")
 	flag.Parse()

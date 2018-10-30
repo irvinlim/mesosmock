@@ -95,13 +95,22 @@ func schedulerCallMux(call *scheduler.Call, st *state.MasterState, w http.Respon
 func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.ResponseWriter, r *http.Request) error {
 	streamID := stream.NewStreamID()
 
+	// Validate SUBSCRIBE call
+	if call.Subscribe == nil || call.Subscribe.FrameworkInfo == nil {
+		return fmt.Errorf("missing required fields: subscribe.framework_info")
+	}
+
+	info := call.Subscribe.FrameworkInfo
+	if info.User == "" || info.Name == "" {
+		return fmt.Errorf("missing required fields: subscribe.framework_info.user, subscribe.framework_info.name")
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Mesos-Stream-Id", streamID.String())
 	w.WriteHeader(http.StatusOK)
 
 	// TODO: Allow frameworks to subscribe without specifying framework ID.
 	id := call.FrameworkID
-	info := call.Subscribe.FrameworkInfo
 	log.Infof("Received subscription request for HTTP framework '%s'", info.Name)
 
 	var closeOld chan struct{}
