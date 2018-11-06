@@ -17,6 +17,9 @@ hostname = "localhost"
   # Number of agents to simulate in the cluster.
   agent_count = 2
 
+# Configuration for cluster emulation.
+[emulation]
+
   # Emulates tasks transiting to different TaskStates in their lifecycle.
   # All probability ratios are over 1; the sum of all ratios (excluding ratio_task_lost_recovered) cannot exceed 1.
   # Leftover ratio proportions will be the ratio of tasks that terminate in TASK_FINISHED.
