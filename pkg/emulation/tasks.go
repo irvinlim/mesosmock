@@ -103,10 +103,12 @@ func createStatus(e *EventTask) mesos.TaskStatus {
 		panic("event task cannot be nil")
 	}
 
+	timestamp := float64(time.Now().Unix())
 	return mesos.TaskStatus{
-		TaskID:  e.Task.TaskID,
-		AgentID: &e.Task.AgentID,
-		Healthy: e.Healthy,
-		State:   &e.State,
+		TaskID:    e.Task.TaskID,
+		AgentID:   &e.Task.AgentID,
+		Healthy:   e.Healthy,
+		State:     &e.State,
+		Timestamp: &timestamp,
 	}
 }
