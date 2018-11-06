@@ -17,7 +17,9 @@ type Options struct {
 }
 
 type mesosOptions struct {
-	AgentCount int `toml:"agent_count"`
+	AgentCount          int     `toml:"agent_count"`
+	ResourcesCpuOffered float64 `toml:"resources_cpu_offered"`
+	ResourcesMemOffered int64   `toml:"resources_mem_offered"`
 }
 
 func newOptions() *Options {

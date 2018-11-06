@@ -27,6 +27,8 @@ type MasterState struct {
 	Agents *sync.Map
 
 	agentOffset *uint64
+	cpusOffered float64
+	memOffered  float64
 }
 
 // FrameworkState stores any global information about a single framework registered on the master.
@@ -70,6 +72,8 @@ func NewMasterState(opts *config.Options) (*MasterState, error) {
 		Agents:     new(sync.Map),
 
 		agentOffset: &agentOffset,
+		cpusOffered: opts.Mesos.ResourcesCpuOffered,
+		memOffered:  float64(opts.Mesos.ResourcesMemOffered),
 	}
 
 	if err := state.initState(opts); err != nil {
@@ -128,6 +132,11 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 		return nil
 	}
 
+	agent, exists := s.GetAgent(agentID)
+	if !exists {
+		return nil
+	}
+
 	// For simplicity, we assume that every agent only sends one offer each time for all of its (infinite) resources.
 	if _, exists := frameworkState.outstandingOffers.Load(agentID); exists {
 		return nil
@@ -152,10 +161,25 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 	// Increment offer offset for framework.
 	atomic.AddUint64(frameworkState.offerOffset, 1)
 
+	valueType := mesos.SCALAR
 	offer := &mesos.Offer{
 		ID:          offerID,
 		AgentID:     agentID,
+		Hostname:    agent.AgentInfo.Hostname,
 		FrameworkID: frameworkID,
+		Attributes:  []mesos.Attribute{},
+		Resources: mesos.Resources{
+			mesos.Resource{
+				Name:   "cpus",
+				Type:   &valueType,
+				Scalar: &mesos.Value_Scalar{Value: s.cpusOffered},
+			},
+			mesos.Resource{
+				Name:   "mem",
+				Type:   &valueType,
+				Scalar: &mesos.Value_Scalar{Value: s.memOffered},
+			},
+		},
 	}
 
 	s.Offers.Store(offerID, offer)
@@ -214,8 +238,11 @@ func (s MasterState) NewTask(frameworkID mesos.FrameworkID, taskInfo mesos.TaskI
 		Container:   taskInfo.Container,
 		Labels:      taskInfo.Labels,
 		Resources:   taskInfo.Resources,
-		ExecutorID:  &taskInfo.Executor.ExecutorID,
 		Discovery:   taskInfo.Discovery,
+	}
+
+	if taskInfo.Executor != nil {
+		task.ExecutorID = &taskInfo.Executor.ExecutorID
 	}
 
 	framework.NonTerminalTasks.Store(taskInfo.TaskID, &task)
@@ -273,6 +300,15 @@ func (s MasterState) GetOffer(offerID mesos.OfferID) (*mesos.Offer, bool) {
 	}
 
 	return offer.(*mesos.Offer), true
+}
+
+func (s MasterState) GetAgent(agentID mesos.AgentID) (*AgentState, bool) {
+	agent, exists := s.Agents.Load(agentID)
+	if !exists {
+		return nil, false
+	}
+
+	return agent.(*AgentState), true
 }
 
 func (s MasterState) GetAgents() []AgentState {
