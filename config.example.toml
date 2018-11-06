@@ -25,8 +25,8 @@ hostname = "localhost"
 [emulation]
 
   # Emulates tasks transiting to different TaskStates in their lifecycle.
-  # All probability ratios are over 1; the sum of all ratios (excluding ratio_task_lost_recovered) cannot exceed 1.
-  # Leftover ratio proportions will be the ratio of tasks that terminate in TASK_FINISHED.
+  # All probability ratios are over 1; the sum of all ratios (excluding ratio_task_error and ratio_task_lost_recovered)
+  # cannot exceed 1. Leftover ratio proportions will be the ratio of tasks that terminate in TASK_FINISHED.
   [emulation.task_state]
 
   # Delay (in seconds) before transiting to TASK_STAGING state.

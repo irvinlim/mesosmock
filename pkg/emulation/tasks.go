@@ -2,6 +2,7 @@ package emulation
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/irvinlim/mesosmock/pkg/config"
@@ -83,19 +84,81 @@ func (e *TaskEmulation) consume(ctx context.Context, send chan<- *Event, recv <-
 			e.GetStatus <- createStatus(task)
 
 			// Handle status update and emulate next event
-			// TODO: Implement actual emulation, currently all tasks transit to error
-			if task.State != mesos.TASK_ERROR {
-				send <- &Event{
-					Deadline: time.Now().Add(5 * time.Second),
-					Task: &EventTask{
-						Task:  task.Task,
-						State: mesos.TASK_ERROR,
-					},
-				}
+			if nextEvent := e.getNextEvent(task); nextEvent != nil {
+				send <- nextEvent
 			}
 		case <-time.After(1 * time.Second):
 		}
 	}
+}
+
+func (e *TaskEmulation) getNextEvent(task *EventTask) *Event {
+	opts := e.opts.TaskState
+
+	stagingWeights := make(map[float64]mesos.TaskState)
+	stagingWeights[opts.RatioTaskError] = mesos.TASK_ERROR
+	stagingWeights[1-opts.RatioTaskError] = mesos.TASK_STARTING
+
+	startingWeights := make(map[float64]mesos.TaskState)
+	startingWeights[opts.RatioTaskDropped] = mesos.TASK_DROPPED
+	startingWeights[opts.RatioTaskFailed] = mesos.TASK_FAILED
+	startingWeights[opts.RatioTaskFinished] = mesos.TASK_FINISHED
+	startingWeights[opts.RatioTaskUnreachable] = mesos.TASK_UNREACHABLE
+	startingWeights[opts.RatioTaskGone] = mesos.TASK_GONE
+	startingWeights[opts.RatioTaskGoneByOperator] = mesos.TASK_GONE_BY_OPERATOR
+
+	nextState := mesos.TASK_UNKNOWN
+	delay := opts.DelayTaskNextState
+
+	// TASK_STAGING -> TASK_STARTING | TASK_ERROR
+	if task.State == mesos.TASK_STAGING {
+		nextState = weightedRandomSelect(stagingWeights)
+		if nextState == mesos.TASK_STARTING {
+			delay = opts.DelayTaskStarting
+		}
+	}
+
+	// TASK_STARTING -> TASK_XXX
+	if task.State == mesos.TASK_STARTING {
+		nextState = weightedRandomSelect(startingWeights)
+	}
+
+	// TASK_RUNNING -> TASK_XXX
+	if task.State == mesos.TASK_RUNNING {
+		nextState = weightedRandomSelect(startingWeights)
+	}
+
+	// TASK_LOST -> TASK_RUNNING
+	if task.State == mesos.TASK_LOST {
+		if rand.Float64() < opts.RatioTaskLostRecovered {
+			nextState = mesos.TASK_RUNNING
+			delay = opts.DelayTaskLostRecovered
+		}
+	}
+
+	if nextState != mesos.TASK_UNKNOWN {
+		return createEvent(task.Task, nextState, delay)
+	}
+
+	return nil
+}
+
+func createEvent(task *mesos.Task, state mesos.TaskState, delay float64) *Event {
+	event := Event{
+		Deadline: time.Now().Add(time.Duration(delay * float64(time.Second))),
+		Task: &EventTask{
+			Task:  task,
+			State: state,
+		},
+	}
+
+	// TODO: Emulate task health.
+	if state == mesos.TASK_RUNNING {
+		healthy := true
+		event.Task.Healthy = &healthy
+	}
+
+	return &event
 }
 
 func createStatus(e *EventTask) mesos.TaskStatus {

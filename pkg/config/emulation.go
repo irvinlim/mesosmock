@@ -44,9 +44,9 @@ func newEmulationOptions() *EmulationOptions {
 func (o *EmulationOptions) Validate() error {
 	t := o.TaskState
 
-	ratiosToSum := []float64{t.RatioTaskDropped, t.RatioTaskError, t.RatioTaskFailed, t.RatioTaskGone,
-		t.RatioTaskGoneByOperator, t.RatioTaskLost, t.RatioTaskUnreachable}
-	otherRatios := []float64{t.RatioTaskLostRecovered}
+	ratiosToSum := []float64{t.RatioTaskDropped, t.RatioTaskFailed, t.RatioTaskGone, t.RatioTaskGoneByOperator,
+		t.RatioTaskLost, t.RatioTaskUnreachable}
+	otherRatios := []float64{t.RatioTaskError, t.RatioTaskLostRecovered}
 
 	var sumRatios float64 = 0
 	for _, ratio := range ratiosToSum {
