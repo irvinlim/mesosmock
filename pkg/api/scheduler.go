@@ -194,7 +194,7 @@ func schedulerSubscribe(opts *config.Options, call *scheduler.Call, st *state.Ma
 	sub.sendEvent(event)
 
 	// Emulate task updates
-	sub.taskEmulation.EmulateTasks(ctx, *info.ID)
+	go sub.taskEmulation.EmulateTasks(ctx, *info.ID)
 
 	// Mock event producers, as if this is the master of a real Mesos cluster
 	go sub.sendHeartbeat(ctx)

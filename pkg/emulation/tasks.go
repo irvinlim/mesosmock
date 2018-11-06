@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/irvinlim/mesosmock/pkg/config"
 	"github.com/irvinlim/mesosmock/pkg/state"
 	"github.com/mesos/mesos-go/api/v1/lib"
@@ -37,6 +38,8 @@ func (e *TaskEmulation) EmulateTasks(ctx context.Context, frameworkID mesos.Fram
 	go e.delayQueue.Start(in, out, quit)
 	go e.consume(ctx, out, frameworkID)
 	go e.produce(ctx, in, frameworkID)
+
+	<-ctx.Done()
 }
 
 func (e *TaskEmulation) produce(ctx context.Context, send chan<- *Event, frameworkID mesos.FrameworkID) {
@@ -46,14 +49,23 @@ func (e *TaskEmulation) produce(ctx context.Context, send chan<- *Event, framewo
 		select {
 		case <-ctx.Done():
 			return
-		case task := <-e.CreateTask:
-			send <- &Event{
+
+		// TODO: Temporary placeholder. Consume from e.CreateTask instead.
+		case <-time.After(1 * time.Second):
+			task := mesos.Task{
+				TaskID:  mesos.TaskID{Value: uuid.New().String()},
+				AgentID: mesos.AgentID{Value: uuid.New().String()},
+			}
+
+			event := Event{
 				Deadline: time.Now().Add(time.Duration(e.opts.TaskState.DelayTaskStaging * float64(time.Second))),
 				Task: &EventTask{
 					Task:  &task,
 					State: mesos.TASK_STAGING,
 				},
 			}
+
+			send <- &event
 		}
 	}
 }
