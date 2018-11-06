@@ -21,6 +21,7 @@ type Server struct {
 // NewServer creates a new API server for serving Mesos master requests.
 func NewServer(o *config.Options, s *state.MasterState) *Server {
 	httpLogger := logger.New()
+	httpLogger.SetFormatter(&logger.TextFormatter{ForceColors: true})
 	logW := log.New(httpLogger.Writer(), "", 0)
 
 	router := http.NewServeMux()

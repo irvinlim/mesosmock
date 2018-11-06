@@ -3,12 +3,21 @@ package emulation
 import (
 	"container/heap"
 	"time"
+
+	"github.com/mesos/mesos-go/api/v1/lib"
 )
 
-type DelayQueue []*EventInterface
+type DelayQueue []*Event
 
-type EventInterface interface {
-	Deadline() time.Time
+type Event struct {
+	Deadline time.Time
+	Task     *EventTask
+}
+
+type EventTask struct {
+	Task    *mesos.Task
+	State   mesos.TaskState
+	Healthy *bool
 }
 
 func NewDelayQueue() *DelayQueue {
@@ -23,7 +32,7 @@ func (q DelayQueue) Len() int {
 
 func (q DelayQueue) Less(i, j int) bool {
 	// Min-heap, indexed by deadline.
-	return (*q[i]).Deadline().Before((*q[j]).Deadline())
+	return (*q[i]).Deadline.Before((*q[j]).Deadline)
 }
 
 func (q DelayQueue) Swap(i, j int) {
@@ -31,12 +40,12 @@ func (q DelayQueue) Swap(i, j int) {
 }
 
 func (q *DelayQueue) Push(x interface{}) {
-	*q = append(*q, x.(*EventInterface))
+	*q = append(*q, x.(*Event))
 }
 
 func (q *DelayQueue) Pop() interface{} {
 	old := *q
-	if (*old[0]).Deadline().After(time.Now()) {
+	if (*old[0]).Deadline.After(time.Now()) {
 		return nil
 	}
 

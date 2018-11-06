@@ -19,13 +19,6 @@ type TaskEmulation struct {
 	GetStatus  chan mesos.TaskStatus
 }
 
-type TaskStatusEvent struct {
-	EventInterface
-	Task    *mesos.Task
-	State   mesos.TaskState
-	Healthy *bool
-}
-
 func NewTaskEmulation(opts *config.EmulationOptions, masterState *state.MasterState) *TaskEmulation {
 	return &TaskEmulation{
 		opts:        opts,
@@ -46,9 +39,12 @@ func (e *TaskEmulation) produce(ctx context.Context, frameworkID mesos.Framework
 		case <-ctx.Done():
 			return
 		case task := <-e.CreateTask:
-			event := &TaskStatusEvent{
-				Task:  &task,
-				State: mesos.TASK_STAGING,
+			event := &Event{
+				Deadline: time.Now().Add(time.Duration(e.opts.TaskState.DelayTaskStaging * float64(time.Second))),
+				Task: &EventTask{
+					Task:  &task,
+					State: mesos.TASK_STAGING,
+				},
 			}
 			heap.Push(e.delayQueue, event)
 		}
@@ -59,17 +55,22 @@ func (e *TaskEmulation) consume(ctx context.Context, frameworkID mesos.Framework
 	for {
 		// Consume from delay queue
 		if e.delayQueue.Len() > 0 {
-			event := heap.Pop(e.delayQueue).(*TaskStatusEvent)
+			event := heap.Pop(e.delayQueue)
 			if event != nil {
+				task := event.(*Event).Task
+
 				// Send status update
-				e.GetStatus <- event.createStatus()
+				e.GetStatus <- createStatus(task)
 
 				// Handle status update and emulate next event
 				// TODO: Implement actual emulation, currently all tasks transit to error
-				if event.State != mesos.TASK_ERROR {
-					newEvent := &TaskStatusEvent{
-						Task:  event.Task,
-						State: mesos.TASK_ERROR,
+				if task.State != mesos.TASK_ERROR {
+					newEvent := &Event{
+						Deadline: time.Now().Add(5 * time.Second),
+						Task: &EventTask{
+							Task:  task.Task,
+							State: mesos.TASK_ERROR,
+						},
 					}
 					heap.Push(e.delayQueue, newEvent)
 				}
@@ -85,7 +86,11 @@ func (e *TaskEmulation) consume(ctx context.Context, frameworkID mesos.Framework
 	}
 }
 
-func (e *TaskStatusEvent) createStatus() mesos.TaskStatus {
+func createStatus(e *EventTask) mesos.TaskStatus {
+	if e == nil {
+		panic("event task cannot be nil")
+	}
+
 	return mesos.TaskStatus{
 		TaskID:  e.Task.TaskID,
 		AgentID: &e.Task.AgentID,
