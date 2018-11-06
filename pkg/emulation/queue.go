@@ -2,6 +2,7 @@ package emulation
 
 import (
 	"container/heap"
+	"context"
 	"time"
 
 	"github.com/mesos/mesos-go/api/v1/lib"
@@ -45,12 +46,34 @@ func (q *DelayQueue) Push(x interface{}) {
 
 func (q *DelayQueue) Pop() interface{} {
 	old := *q
-	if (*old[0]).Deadline.After(time.Now()) {
-		return nil
-	}
-
 	n := len(old)
 	item := old[n-1]
 	*q = old[0 : n-1]
 	return item
+}
+
+func (q *DelayQueue) Peek() *Event {
+	if q.Len() == 0 {
+		return nil
+	}
+	return (*q)[0]
+}
+
+// See https://stackoverflow.com/questions/31060023/go-wait-for-next-item-in-a-priority-queue-if-empty
+func (q *DelayQueue) Start(in <-chan *Event, out chan<- *Event) {
+	defer close(out)
+
+	for {
+		ctx := context.Background()
+		if q.Peek() != nil {
+			ctx, _ = context.WithDeadline(ctx, q.Peek().Deadline)
+		}
+
+		select {
+		case event := <-in:
+			heap.Push(q, event)
+		case <-ctx.Done():
+			out <- heap.Pop(q).(*Event)
+		}
+	}
 }
