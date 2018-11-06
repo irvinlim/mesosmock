@@ -29,14 +29,14 @@ type MasterState struct {
 	// Agents store a list of generated Mesos agents.
 	Agents *sync.Map
 
-	agentOffset uint64
+	agentOffset *uint64
 }
 
 // FrameworkState stores any global information about a single framework registered on the master.
 type FrameworkState struct {
 	FrameworkInfo *mesos.FrameworkInfo
 
-	offerOffset       uint64
+	offerOffset       *uint64
 	outstandingOffers *sync.Map
 	refusedAgents     *sync.Map
 }
@@ -51,7 +51,9 @@ type refusedAgent struct {
 
 // NewMasterState initialises a new master state for the mock cluster.
 func NewMasterState(opts *config.Options) (*MasterState, error) {
+	var agentOffset uint64 = 0
 	masterID := uuid.New().String()
+
 	state := &MasterState{
 		MasterInfo: &mesos.MasterInfo{
 			ID: masterID,
@@ -67,7 +69,7 @@ func NewMasterState(opts *config.Options) (*MasterState, error) {
 		Offers:     new(sync.Map),
 		Agents:     new(sync.Map),
 
-		agentOffset: 0,
+		agentOffset: &agentOffset,
 	}
 
 	if err := state.initState(opts); err != nil {
@@ -89,9 +91,11 @@ func (s MasterState) initState(opts *config.Options) error {
 
 // NewFramework creates and adds a new framework to the master.
 func (s MasterState) NewFramework(info *mesos.FrameworkInfo) *FrameworkState {
+	var offerOffset uint64 = 0
+
 	framework := &FrameworkState{
 		FrameworkInfo:     info,
-		offerOffset:       0,
+		offerOffset:       &offerOffset,
 		outstandingOffers: new(sync.Map),
 		refusedAgents:     new(sync.Map),
 	}
@@ -136,7 +140,7 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 	}
 
 	// Create new offer ID.
-	offset := atomic.LoadUint64(&frameworkState.offerOffset)
+	offset := atomic.LoadUint64(frameworkState.offerOffset)
 	offerIDString := fmt.Sprintf("%s-O%d", frameworkID.Value, offset)
 	offerID := mesos.OfferID{Value: offerIDString}
 
@@ -144,7 +148,7 @@ func (s MasterState) NewOffer(frameworkID mesos.FrameworkID, agentID mesos.Agent
 	frameworkState.outstandingOffers.Store(agentID, offerID)
 
 	// Increment offer offset for framework.
-	atomic.AddUint64(&frameworkState.offerOffset, 1)
+	atomic.AddUint64(frameworkState.offerOffset, 1)
 
 	offer := &mesos.Offer{
 		ID:          offerID,
@@ -171,7 +175,7 @@ func (s MasterState) RemoveOffer(frameworkID mesos.FrameworkID, offerID mesos.Of
 
 func (s MasterState) NewAgent() *AgentState {
 	// Atomically increment counter, actual value is before increment
-	offset := atomic.AddUint64(&s.agentOffset, 1)
+	offset := atomic.AddUint64(s.agentOffset, 1)
 
 	agentID := mesos.AgentID{Value: fmt.Sprintf("%s-S%d", s.MasterInfo.ID, offset-1)}
 	port := int32(5051)
