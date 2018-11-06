@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/irvinlim/mesosmock/pkg/config"
 	"github.com/irvinlim/mesosmock/pkg/state"
 	"github.com/mesos/mesos-go/api/v1/lib"
@@ -15,7 +14,7 @@ type TaskEmulation struct {
 	masterState *state.MasterState
 	delayQueue  *DelayQueue
 
-	CreateTask chan mesos.Task
+	CreateTask chan *mesos.Task
 	GetStatus  chan mesos.TaskStatus
 }
 
@@ -24,6 +23,7 @@ func NewTaskEmulation(opts *config.EmulationOptions, masterState *state.MasterSt
 		opts:        opts,
 		masterState: masterState,
 		delayQueue:  NewDelayQueue(),
+		CreateTask:  make(chan *mesos.Task),
 		GetStatus:   make(chan mesos.TaskStatus),
 	}
 }
@@ -49,17 +49,15 @@ func (e *TaskEmulation) produce(ctx context.Context, send chan<- *Event, framewo
 		case <-ctx.Done():
 			return
 
-		// TODO: Temporary placeholder. Consume from e.CreateTask instead.
-		case <-time.After(1 * time.Second):
-			task := mesos.Task{
-				TaskID:  mesos.TaskID{Value: uuid.New().String()},
-				AgentID: mesos.AgentID{Value: uuid.New().String()},
+		case task, ok := <-e.CreateTask:
+			if !ok {
+				break
 			}
 
 			event := Event{
 				Deadline: time.Now().Add(time.Duration(e.opts.TaskState.DelayTaskStaging * float64(time.Second))),
 				Task: &EventTask{
-					Task:  &task,
+					Task:  task,
 					State: mesos.TASK_STAGING,
 				},
 			}

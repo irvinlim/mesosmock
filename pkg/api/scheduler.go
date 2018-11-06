@@ -65,6 +65,7 @@ func schedulerCallMux(opts *config.Options, call *scheduler.Call, st *state.Mast
 	// Invoke handler for different call types
 	callTypeHandlers := map[scheduler.Call_Type]func(*scheduler.Call, *state.MasterState) (*scheduler.Response, error){
 		scheduler.Call_DECLINE: decline,
+		scheduler.Call_ACCEPT:  accept,
 	}
 
 	handler := callTypeHandlers[call.Type]
@@ -256,6 +257,53 @@ func decline(call *scheduler.Call, st *state.MasterState) (*scheduler.Response, 
 
 		st.RemoveOffer(*info.ID, offerID, refuseDuration)
 		log.Debugf("Removing offer %s", offerID.Value)
+	}
+
+	return nil, nil
+}
+
+func accept(call *scheduler.Call, st *state.MasterState) (*scheduler.Response, error) {
+	framework, exists := st.GetFramework(*call.FrameworkID)
+	if !exists {
+		return nil, fmt.Errorf("framework does not exist: %s", call.FrameworkID.Value)
+	}
+
+	info := framework.FrameworkInfo
+
+	subscription, exists := schedulerSubscriptions[*info.ID]
+	if !exists {
+		return nil, fmt.Errorf("framework is not subscribed: %s", call.FrameworkID.Value)
+	}
+
+	log.Debugf("Processing ACCEPT call for offers: %s for framework %s (%s)", call.Accept.OfferIDs,
+		info.ID.Value, info.Name)
+
+	for _, offerID := range call.Accept.OfferIDs {
+		// Refuse seconds defaults to 5 seconds:
+		// https://github.com/apache/mesos/blob/5b8f632e75d3c20be172c1678c04f77ae18cda1a/include/mesos/mesos.proto#L2577
+		refuseDuration := time.Duration(5 * time.Second)
+		if call.Accept.Filters.RefuseSeconds != nil {
+			refuseDuration = time.Duration(*call.Accept.Filters.RefuseSeconds * float64(time.Second))
+		}
+
+		st.RemoveOffer(*info.ID, offerID, refuseDuration)
+		log.Debugf("Removing offer %s", offerID.Value)
+	}
+
+	// Only LAUNCH is supported at the moment
+	for _, operation := range call.Accept.Operations {
+		if operation.Type != mesos.Offer_Operation_LAUNCH {
+			return nil, fmt.Errorf("operation '%s' is not yet supported by mesosmock", operation.Type.String())
+		}
+	}
+
+	for _, operation := range call.Accept.Operations {
+		for _, taskInfo := range operation.Launch.TaskInfos {
+			task := st.NewTask(*info.ID, taskInfo)
+
+			log.Debugf("Launching task %s", taskInfo.TaskID.String())
+			subscription.taskEmulation.CreateTask <- task
+		}
 	}
 
 	return nil, nil

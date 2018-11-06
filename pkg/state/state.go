@@ -197,6 +197,31 @@ func (s MasterState) NewAgent() *AgentState {
 	return agent
 }
 
+func (s MasterState) NewTask(frameworkID mesos.FrameworkID, taskInfo mesos.TaskInfo) *mesos.Task {
+	framework, exists := s.GetFramework(frameworkID)
+	if !exists {
+		return nil
+	}
+
+	// We ignore command and healthcheck in the TaskInfo as it is not relevant to our needs right now.
+	state := mesos.TASK_STAGING
+	task := &mesos.Task{
+		Name:        taskInfo.Name,
+		TaskID:      taskInfo.TaskID,
+		AgentID:     taskInfo.AgentID,
+		FrameworkID: frameworkID,
+		State:       &state,
+		Container:   taskInfo.Container,
+		Labels:      taskInfo.Labels,
+		Resources:   taskInfo.Resources,
+		ExecutorID:  &taskInfo.Executor.ExecutorID,
+		Discovery:   taskInfo.Discovery,
+	}
+
+	framework.NonTerminalTasks.Store(taskInfo.TaskID, &task)
+	return task
+}
+
 func (s MasterState) GetFramework(frameworkID mesos.FrameworkID) (*FrameworkState, bool) {
 	framework, exists := s.Frameworks.Load(frameworkID)
 	if !exists {
