@@ -5,7 +5,6 @@ import (
 	"net"
 
 	"github.com/BurntSushi/toml"
-	"github.com/irvinlim/mesosmock/pkg/emulation"
 )
 
 // Options for configuration of mesosmock loaded from a config file.
@@ -14,7 +13,7 @@ type Options struct {
 	Port      int
 	Hostname  string
 	Mesos     *mesosOptions
-	Emulation *emulation.Options
+	Emulation *EmulationOptions
 }
 
 type mesosOptions struct {
@@ -29,7 +28,7 @@ func newOptions() *Options {
 		Mesos: &mesosOptions{
 			AgentCount: 1,
 		},
-		Emulation: emulation.NewOptions(),
+		Emulation: newEmulationOptions(),
 	}
 }
 

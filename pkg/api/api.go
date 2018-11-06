@@ -28,8 +28,8 @@ func NewServer(o *config.Options, s *state.MasterState) *Server {
 	router.Handle("/master/api/v1", Operator(s))
 	router.Handle("/api/v1/operator", Operator(s))
 	router.Handle("/master/api/v1/operator", Operator(s))
-	router.Handle("/api/v1/scheduler", Scheduler(s))
-	router.Handle("/master/api/v1/scheduler", Scheduler(s))
+	router.Handle("/api/v1/scheduler", Scheduler(o, s))
+	router.Handle("/master/api/v1/scheduler", Scheduler(o, s))
 
 	server := http.Server{
 		Addr:     o.GetAddress(),

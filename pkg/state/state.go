@@ -20,9 +20,6 @@ type MasterState struct {
 	// Frameworks registered in the master.
 	Frameworks *sync.Map
 
-	// Tasks that are created and not in terminal state.
-	Tasks *sync.Map
-
 	// Offers sent to frameworks that are not yet accepted or declined.
 	Offers *sync.Map
 
@@ -35,6 +32,10 @@ type MasterState struct {
 // FrameworkState stores any global information about a single framework registered on the master.
 type FrameworkState struct {
 	FrameworkInfo *mesos.FrameworkInfo
+
+	// Tasks for the framework that are created and not in terminal state.
+	NonTerminalTasks *sync.Map
+	TerminalTasks    *sync.Map
 
 	offerOffset       *uint64
 	outstandingOffers *sync.Map
@@ -65,7 +66,6 @@ func NewMasterState(opts *config.Options) (*MasterState, error) {
 		},
 
 		Frameworks: new(sync.Map),
-		Tasks:      new(sync.Map),
 		Offers:     new(sync.Map),
 		Agents:     new(sync.Map),
 
@@ -95,6 +95,8 @@ func (s MasterState) NewFramework(info *mesos.FrameworkInfo) *FrameworkState {
 
 	framework := &FrameworkState{
 		FrameworkInfo:     info,
+		NonTerminalTasks:  new(sync.Map),
+		TerminalTasks:     new(sync.Map),
 		offerOffset:       &offerOffset,
 		outstandingOffers: new(sync.Map),
 		refusedAgents:     new(sync.Map),
@@ -204,8 +206,16 @@ func (s MasterState) GetFramework(frameworkID mesos.FrameworkID) (*FrameworkStat
 	return framework.(*FrameworkState), true
 }
 
-func (s MasterState) GetTask(taskID mesos.TaskID) (*mesos.Task, bool) {
-	task, exists := s.Tasks.Load(taskID)
+func (s MasterState) GetTask(frameworkID mesos.FrameworkID, taskID mesos.TaskID) (*mesos.Task, bool) {
+	framework, exists := s.GetFramework(frameworkID)
+	if !exists {
+		return nil, false
+	}
+
+	task, exists := framework.NonTerminalTasks.Load(taskID)
+	if !exists {
+		task, exists = framework.TerminalTasks.Load(taskID)
+	}
 	if !exists {
 		return nil, false
 	}
@@ -215,8 +225,16 @@ func (s MasterState) GetTask(taskID mesos.TaskID) (*mesos.Task, bool) {
 
 func (s MasterState) GetTasks() []mesos.Task {
 	var tasks []mesos.Task
-	s.Tasks.Range(func(taskID interface{}, task interface{}) bool {
+
+	appendTask := func(taskID interface{}, task interface{}) bool {
 		tasks = append(tasks, *task.(*mesos.Task))
+		return true
+	}
+
+	s.Frameworks.Range(func(frameworkID interface{}, framework interface{}) bool {
+		f := framework.(*FrameworkState)
+		f.NonTerminalTasks.Range(appendTask)
+		f.TerminalTasks.Range(appendTask)
 		return true
 	})
 

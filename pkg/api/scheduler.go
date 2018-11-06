@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/irvinlim/mesosmock/pkg/config"
+	"github.com/irvinlim/mesosmock/pkg/emulation"
 	"github.com/irvinlim/mesosmock/pkg/state"
 	"github.com/irvinlim/mesosmock/pkg/stream"
 	"github.com/mesos/mesos-go/api/v1/lib"
@@ -20,6 +22,8 @@ type schedulerSubscription struct {
 	streamID    stream.ID
 	frameworkID mesos.FrameworkID
 
+	taskEmulation *emulation.TaskEmulation
+
 	write  chan<- []byte
 	closed chan struct{}
 }
@@ -28,7 +32,7 @@ var schedulerSubscriptions = make(map[mesos.FrameworkID]schedulerSubscription)
 
 // Scheduler returns a http.Handler for providing the Mesos Scheduler HTTP API:
 // https://mesos.apache.org/documentation/latest/scheduler-http-api/
-func Scheduler(st *state.MasterState) http.Handler {
+func Scheduler(opts *config.Options, st *state.MasterState) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		call := &scheduler.Call{}
 
@@ -39,7 +43,7 @@ func Scheduler(st *state.MasterState) http.Handler {
 			return
 		}
 
-		err = schedulerCallMux(call, st, w, r)
+		err = schedulerCallMux(opts, call, st, w, r)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(w, "Failed to validate scheduler::Call: %s", err)
@@ -48,14 +52,14 @@ func Scheduler(st *state.MasterState) http.Handler {
 	})
 }
 
-func schedulerCallMux(call *scheduler.Call, st *state.MasterState, w http.ResponseWriter, r *http.Request) error {
+func schedulerCallMux(opts *config.Options, call *scheduler.Call, st *state.MasterState, w http.ResponseWriter, r *http.Request) error {
 	if call.Type == scheduler.Call_UNKNOWN {
 		return fmt.Errorf("expecting 'type' to be present")
 	}
 
 	// Handle SUBSCRIBE calls differently
 	if call.Type == scheduler.Call_SUBSCRIBE {
-		return schedulerSubscribe(call, st, w, r)
+		return schedulerSubscribe(opts, call, st, w, r)
 	}
 
 	// Invoke handler for different call types
@@ -93,7 +97,7 @@ func schedulerCallMux(call *scheduler.Call, st *state.MasterState, w http.Respon
 	return nil
 }
 
-func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.ResponseWriter, r *http.Request) error {
+func schedulerSubscribe(opts *config.Options, call *scheduler.Call, st *state.MasterState, w http.ResponseWriter, r *http.Request) error {
 	var closeOld chan struct{}
 	streamID := stream.NewStreamID()
 
@@ -139,10 +143,11 @@ func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.Resp
 	log.Infof("Subscribing framework '%s'", info.Name)
 	write := make(chan []byte)
 	sub := schedulerSubscription{
-		streamID:    streamID,
-		frameworkID: *info.ID,
-		closed:      make(chan struct{}),
-		write:       write,
+		streamID:      streamID,
+		frameworkID:   *info.ID,
+		taskEmulation: emulation.NewTaskEmulation(opts.Emulation, st),
+		closed:        make(chan struct{}),
+		write:         write,
 	}
 	schedulerSubscriptions[*info.ID] = sub
 
@@ -188,9 +193,13 @@ func schedulerSubscribe(call *scheduler.Call, st *state.MasterState, w http.Resp
 	}
 	sub.sendEvent(event)
 
+	// Emulate task updates
+	sub.taskEmulation.EmulateTasks(ctx, *info.ID)
+
 	// Mock event producers, as if this is the master of a real Mesos cluster
 	go sub.sendHeartbeat(ctx)
 	go sub.sendResourceOffers(ctx, st)
+	go sub.sendStatusUpdates(ctx, st)
 
 	// Block until subscription is closed either by the current client, or by another request.
 	select {
@@ -298,6 +307,31 @@ func (s schedulerSubscription) sendResourceOffers(ctx context.Context, st *state
 		case <-ctx.Done():
 			return
 		case <-time.After(1 * time.Second):
+		}
+	}
+}
+
+func (s schedulerSubscription) sendStatusUpdates(ctx context.Context, st *state.MasterState) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case status := <-s.taskEmulation.GetStatus:
+			framework, exists := st.GetFramework(s.frameworkID)
+			if !exists {
+				return
+			}
+
+			event := &scheduler.Event{
+				Type: scheduler.Event_UPDATE,
+				Update: &scheduler.Event_Update{
+					Status: status,
+				},
+			}
+
+			log.Debugf("Sending %s update for task '%s' to framework %s (%s)", status.State, status.TaskID,
+				framework.FrameworkInfo.ID.Value, framework.FrameworkInfo.Name)
+			s.sendEvent(event)
 		}
 	}
 }

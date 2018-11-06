@@ -1,8 +1,8 @@
-package emulation
+package config
 
 import "fmt"
 
-type Options struct {
+type EmulationOptions struct {
 	TaskState *TaskStateOptions `toml:"task_state"`
 }
 
@@ -22,8 +22,8 @@ type TaskStateOptions struct {
 	DelayTaskLostRecovered  float64 `toml:"delay_task_lost_recovered"`
 }
 
-func NewOptions() *Options {
-	return &Options{
+func newEmulationOptions() *EmulationOptions {
+	return &EmulationOptions{
 		TaskState: &TaskStateOptions{
 			DelayTaskStaging:        0,
 			DelayTaskStarting:       1,
@@ -41,7 +41,7 @@ func NewOptions() *Options {
 	}
 }
 
-func (o *Options) Validate() error {
+func (o *EmulationOptions) Validate() error {
 	t := o.TaskState
 
 	ratiosToSum := []float64{t.RatioTaskDropped, t.RatioTaskError, t.RatioTaskFailed, t.RatioTaskGone,
