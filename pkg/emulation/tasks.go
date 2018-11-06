@@ -1,7 +1,6 @@
 package emulation
 
 import (
-	"container/heap"
 	"context"
 	"time"
 
@@ -36,7 +35,7 @@ func (e *TaskEmulation) EmulateTasks(ctx context.Context, frameworkID mesos.Fram
 	defer func() { quit <- true }()
 
 	go e.delayQueue.Start(in, out, quit)
-	go e.consume(ctx, out, frameworkID)
+	go e.consume(ctx, in, out, frameworkID)
 	go e.produce(ctx, in, frameworkID)
 
 	<-ctx.Done()
@@ -70,7 +69,7 @@ func (e *TaskEmulation) produce(ctx context.Context, send chan<- *Event, framewo
 	}
 }
 
-func (e *TaskEmulation) consume(ctx context.Context, recv <-chan *Event, frameworkID mesos.FrameworkID) {
+func (e *TaskEmulation) consume(ctx context.Context, send chan<- *Event, recv <-chan *Event, frameworkID mesos.FrameworkID) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -88,14 +87,13 @@ func (e *TaskEmulation) consume(ctx context.Context, recv <-chan *Event, framewo
 			// Handle status update and emulate next event
 			// TODO: Implement actual emulation, currently all tasks transit to error
 			if task.State != mesos.TASK_ERROR {
-				newEvent := &Event{
+				send <- &Event{
 					Deadline: time.Now().Add(5 * time.Second),
 					Task: &EventTask{
 						Task:  task.Task,
 						State: mesos.TASK_ERROR,
 					},
 				}
-				heap.Push(e.delayQueue, newEvent)
 			}
 		case <-time.After(1 * time.Second):
 		}
