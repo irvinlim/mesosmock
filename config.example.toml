@@ -4,15 +4,60 @@
 #
 
 # IP address to listen on.
-# ip = "127.0.0.1"
+ip = "127.0.0.1"
 
 # Port to listen on.
-# port = 5050
+port = 5050
 
 # Hostname to use for the Mesos master.
-# hostname = "localhost"
+hostname = "localhost"
 
 # Mesos mock cluster configuration.
 [mesos]
   # Number of agents to simulate in the cluster.
-  # agent_count = 2
+  agent_count = 2
+
+  # Emulates tasks transiting to different TaskStates in their lifecycle.
+  # All probability ratios are over 1; the sum of all ratios (excluding ratio_task_lost_recovered) cannot exceed 1.
+  # Leftover ratio proportions will be the ratio of tasks that terminate in TASK_FINISHED.
+  [emulation.task_state]
+
+  # Delay (in seconds) before transiting to TASK_STAGING state.
+  delay_task_staging = 0.0
+
+  # Delay (in seconds) before transiting to TASK_STARTING state.
+  delay_task_starting = 1.0
+
+  # Delay (in seconds) before transiting to the next state.
+  delay_task_next_state = 5.0
+
+  # Ratio of tasks that terminate in TASK_FAILED.
+  ratio_task_failed = 0.0
+
+  # Ratio of tasks that terminate in TASK_ERROR.
+  ratio_task_error = 0.0
+
+  # Ratio of tasks that terminate in TASK_DROPPED.
+  ratio_task_dropped = 0.0
+
+  # Ratio of tasks that terminate in TASK_GONE.
+  ratio_task_gone = 0.0
+
+  # Ratio of tasks that terminate in TASK_GONE_BY_OPERATOR.
+  ratio_task_gone_by_operator = 0.0
+
+  # Ratio of tasks that terminate in TASK_UNREACHABLE.
+  ratio_task_unreachable = 0.0
+
+  # Ratio of tasks that transit to TASK_LOST state.
+  ratio_task_lost = 0.0
+
+  # Ratio of tasks that were lost that end up being recovered.
+  # These recovered tasks will be subject to the same probability ratios as if it was never lost in the first place.
+  # This is a ratio of the number of tasks that were lost, not of all tasks.
+  # For example, if ratio_task_lost = 0.1 and ratio_task_lost_recovered = 0.5,
+  # and 10 tasks out of 100 total tasks were lost, then 5 of those tasks will be recovered.
+  ratio_task_lost_recovered = 0.0
+
+  # Delay (in seconds) between recovery of lost tasks back to TASK_RUNNING.
+  delay_task_lost_recovered = 10.0

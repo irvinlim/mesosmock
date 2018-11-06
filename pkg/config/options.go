@@ -5,14 +5,16 @@ import (
 	"net"
 
 	"github.com/BurntSushi/toml"
+	"github.com/irvinlim/mesosmock/pkg/emulation"
 )
 
 // Options for configuration of mesosmock loaded from a config file.
 type Options struct {
-	IP       string
-	Port     int
-	Hostname string
-	Mesos    *mesosOptions
+	IP        string
+	Port      int
+	Hostname  string
+	Mesos     *mesosOptions
+	Emulation *emulation.Options
 }
 
 type mesosOptions struct {
@@ -27,6 +29,7 @@ func newOptions() *Options {
 		Mesos: &mesosOptions{
 			AgentCount: 1,
 		},
+		Emulation: emulation.NewOptions(),
 	}
 }
 
@@ -48,6 +51,10 @@ func NewOptions(configFile string) (*Options, error) {
 	}
 	if o.Mesos.AgentCount <= 0 {
 		return nil, fmt.Errorf("agent count must be positive")
+	}
+
+	if err := o.Emulation.Validate(); err != nil {
+		return nil, fmt.Errorf("failed to validate emulation options: %s", err)
 	}
 
 	return o, nil
