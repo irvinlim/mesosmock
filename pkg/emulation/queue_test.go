@@ -28,8 +28,16 @@ func newEvent(delay time.Duration) Event {
 	return event
 }
 
-func TestDelayQueue(t *testing.T) {
+func newQueue() (*DelayQueue, chan *Event, chan *Event, chan bool) {
 	q := NewDelayQueue()
+	in := make(chan *Event)
+	out := make(chan *Event)
+	quit := make(chan bool)
+	return q, in, out, quit
+}
+
+func TestDelayQueue(t *testing.T) {
+	q, _, _, _ := newQueue()
 	event := newEvent(-1 * time.Second)
 
 	require.Equal(t, q.Len(), 0)
@@ -47,7 +55,7 @@ func TestDelayQueue(t *testing.T) {
 }
 
 func TestDelayQueue_Heap(t *testing.T) {
-	q := NewDelayQueue()
+	q, _, _, _ := newQueue()
 	var events []*Event
 
 	for i := 9; i >= 0; i-- {
@@ -68,12 +76,11 @@ func TestDelayQueue_Heap(t *testing.T) {
 }
 
 func TestDelayQueue_Chan(t *testing.T) {
-	q := NewDelayQueue()
+	q, in, out, quit := newQueue()
 	event := newEvent(-1 * time.Second)
 
-	in := make(chan *Event)
-	out := make(chan *Event)
-	go q.Start(in, out)
+	go q.Start(in, out, quit)
+	defer func() { quit <- true }()
 
 	in <- &event
 
@@ -88,17 +95,17 @@ func TestDelayQueue_Chan(t *testing.T) {
 		require.Equal(t, event, *readEvent)
 	}
 }
+
 func TestDelayQueue_ChanFuture(t *testing.T) {
-	q := NewDelayQueue()
+	q, in, out, quit := newQueue()
 	event := newEvent(100 * time.Millisecond)
 
-	in := make(chan *Event)
-	out := make(chan *Event)
-	go q.Start(in, out)
+	go q.Start(in, out, quit)
+	defer func() { quit <- true }()
 
 	in <- &event
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	select {
@@ -107,5 +114,36 @@ func TestDelayQueue_ChanFuture(t *testing.T) {
 	case readEvent := <-out:
 		require.NotNil(t, readEvent)
 		require.Equal(t, event, *readEvent)
+	}
+}
+
+func TestDelayQueue_ChanHeap(t *testing.T) {
+	q, in, out, quit := newQueue()
+	var events []*Event
+	for i := 0; i < 10; i++ {
+		event := newEvent(time.Duration((i + 1) * 100 * int(time.Millisecond)))
+		events = append(events, &event)
+	}
+
+	go q.Start(in, out, quit)
+	defer func() { quit <- true }()
+
+	go func() {
+		for i := 9; i >= 0; i-- {
+			in <- events[i]
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		require.FailNow(t, "did not read from channel in time")
+	case readEvent := <-out:
+		require.NotNil(t, readEvent)
+		n := len(events)
+		require.Equal(t, *events[0], *readEvent)
+		events = events[1:n]
 	}
 }
