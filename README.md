@@ -117,6 +117,20 @@ To build for Linux (64-bit):
 env GOOS=linux GOARCH=arm64 go build -v .
 ```
 
+### Project Roadmap
+
+- APIs
+  - [ ] Scheduler v1 API
+  - [ ] Operator v1 API
+  - [ ] Master v1 API
+- Emulation
+  - [x] Cluster emulation for tasks
+  - [ ] Cluster emulation for agents
+- Development
+  - [ ] Create unit tests
+  - [ ] Set up CI/CD
+  - [ ] Create Docker image for binary
+
 ## License
 
 MIT
