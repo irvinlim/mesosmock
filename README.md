@@ -1,8 +1,10 @@
-# mesosmock
+# Mesosmock
 
-**mesosmock** is a HTTP server aimed to mock the behaviour of a real Apache Mesos master, without setting up a real Mesos cluster with several agents. This can be useful for integration/end-to-end tests, or stress/chaos testing of Mesos frameworks.
+_Mesosmock is currently still an active work in progress (WIP)._
 
-The server can be configured to respond or initiate requests based on a configuration file. For example, taking the scheduler API, resource offers and status updates can be configured to be sent at a specific rate.
+**Mesosmock** aims to mock the behaviour of a real [Apache Mesos](https://mesos.apache.org/) cluster. Specifically, it is a HTTP server with the same API as a Mesos master, emulating various behaviours as if it is serving a real Mesos cluster. This can be useful for integration/end-to-end tests, or stress/chaos testing of [Mesos frameworks](https://mesos.apache.org/documentation/latest/frameworks/).
+
+Mesosmock can be configured to behave differently based on settings loaded from a TOML configuration file. For example, you can mock an arbitrary number of Mesos agents with infinite resources, or emulate random task failures with a specific probability.
 
 ## Features
 
@@ -16,7 +18,7 @@ The server can be configured to respond or initiate requests based on a configur
 
 ## APIs Supported
 
-The following APIs are supported currently (or will be eventually supported) by `mesosmock`:
+The following APIs are supported currently (or will be eventually supported) by Mesosmock:
 
 - [Scheduler HTTP API (v1)](https://mesos.apache.org/documentation/latest/scheduler-http-api/)
 - [Operator HTTP API (v1)](https://mesos.apache.org/documentation/latest/operator-http-api/)
@@ -33,9 +35,9 @@ Only JSON APIs are supported at the moment. Additionally, the older v0 APIs will
 ### Command-line Flags
 
 - `-config`: Path to config file. See `config.example.toml` for sample config file format.
-- `-logLevel`: Global log level for mesosmock. Logging may be CPU intensive in some cases, so you can tweak this accordingly.
+- `-logLevel`: Global log level for Mesosmock. Logging may be especially expensive if there are many events and calls, reduce the level as necessary.
 
-### Configuration File
+### Configuration Format
 
 ```toml
 # IP address to listen on.
@@ -113,7 +115,7 @@ This project uses [govendor](https://github.com/kardianos/govendor).
 
 To build for Linux (64-bit):
 
-```
+```sh
 env GOOS=linux GOARCH=arm64 go build -v .
 ```
 
