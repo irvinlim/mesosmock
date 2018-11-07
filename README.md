@@ -4,15 +4,25 @@
 
 The server can be configured to respond or initiate requests based on a configuration file. For example, taking the scheduler API, resource offers and status updates can be configured to be sent at a specific rate.
 
+## Features
+
+- Mock an entire Mesos cluster with a single Mesosmock process
+  - Mock task executions without separate agents or executors
+  - Mock any number of agents with any amount of resources
+- Cluster emulation for chaos testing:
+  - Emulate task failure or task loss (via Scheduler `UPDATE` events)
+  - Emulate agent failure (via Operator `AGENT_ADDED` or Scheduler `TASK_LOST` updates) (WIP)
+  - Emulate resource shortage (WIP)
+
 ## APIs Supported
 
-The following APIs are supported currently (or WIP) by `mesosmock`:
+The following APIs are supported currently (or will be eventually supported) by `mesosmock`:
 
 - [Scheduler HTTP API (v1)](https://mesos.apache.org/documentation/latest/scheduler-http-api/)
 - [Operator HTTP API (v1)](https://mesos.apache.org/documentation/latest/operator-http-api/)
 - [Master HTTP API](https://mesos.apache.org/documentation/latest/endpoints/)
 
-Only JSON is supported at the moment. Additionally, the older v0 APIs will not be supported.
+Only JSON APIs are supported at the moment. Additionally, the older v0 APIs will not be supported.
 
 ## Usage
 
@@ -20,9 +30,80 @@ Only JSON is supported at the moment. Additionally, the older v0 APIs will not b
 ./mesosmock -config=config.json
 ```
 
-### Configuration
+### Command-line Flags
 
-TODO
+- `-config`: Path to config file. See `config.example.toml` for sample config file format.
+- `-logLevel`: Global log level for mesosmock. Logging may be CPU intensive in some cases, so you can tweak this accordingly.
+
+### Configuration File
+
+```toml
+# IP address to listen on.
+ip = "127.0.0.1"
+
+# Port to listen on.
+port = 5050
+
+# Hostname to use for the Mesos master.
+hostname = "localhost"
+
+# Mesos mock cluster configuration.
+[mesos]
+  # Number of agents to simulate in the cluster.
+  agent_count = 2
+
+  # Amount of resources to offer each time.
+  resources_cpu_offered = 64.0
+  resources_mem_offered = 65536
+
+# Configuration for cluster emulation.
+[emulation]
+
+  # Emulates tasks transiting to different TaskStates in their lifecycle.
+  # All probability ratios are over 1; the sum of all ratios (excluding ratio_task_error and ratio_task_lost_recovered)
+  # cannot exceed 1. Leftover ratio proportions will be the ratio of tasks that terminate in TASK_FINISHED.
+  [emulation.task_state]
+
+  # Delay (in seconds) before transiting to TASK_STAGING state.
+  delay_task_staging = 0.0
+
+  # Delay (in seconds) before transiting to TASK_STARTING state.
+  delay_task_starting = 1.0
+
+  # Delay (in seconds) before transiting to the next state.
+  delay_task_next_state = 5.0
+
+  # Ratio of tasks that terminate in TASK_FAILED.
+  ratio_task_failed = 0.0
+
+  # Ratio of tasks that terminate in TASK_ERROR.
+  ratio_task_error = 0.0
+
+  # Ratio of tasks that terminate in TASK_DROPPED.
+  ratio_task_dropped = 0.0
+
+  # Ratio of tasks that terminate in TASK_GONE.
+  ratio_task_gone = 0.0
+
+  # Ratio of tasks that terminate in TASK_GONE_BY_OPERATOR.
+  ratio_task_gone_by_operator = 0.0
+
+  # Ratio of tasks that terminate in TASK_UNREACHABLE.
+  ratio_task_unreachable = 0.0
+
+  # Ratio of tasks that transit to TASK_LOST state.
+  ratio_task_lost = 0.0
+
+  # Ratio of tasks that were lost that end up being recovered.
+  # These recovered tasks will be subject to the same probability ratios as if it was never lost in the first place.
+  # This is a ratio of the number of tasks that were lost, not of all tasks.
+  # For example, if ratio_task_lost = 0.1 and ratio_task_lost_recovered = 0.5,
+  # and 10 tasks out of 100 total tasks were lost, then 5 of those tasks will be recovered.
+  ratio_task_lost_recovered = 0.0
+
+  # Delay (in seconds) between recovery of lost tasks back to TASK_RUNNING.
+  delay_task_lost_recovered = 10.0
+```
 
 ## Development
 
@@ -35,3 +116,7 @@ To build for Linux (64-bit):
 ```
 env GOOS=linux GOARCH=arm64 go build -v .
 ```
+
+## License
+
+MIT
