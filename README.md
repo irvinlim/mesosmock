@@ -1,6 +1,6 @@
 # Mesosmock
 
-[![Analytics](https://ga-beacon.irvinlim.com/UA-61872435-6/mesosmock/readme)](https://github.com/irvinlim/ga-beacon)
+[![Analytics](https://gabeacon.irvinlim.com/UA-61872435-6/mesosmock/readme)](https://github.com/irvinlim/ga-beacon)
 
 _Mesosmock is currently still an active work in progress (WIP)._
 
