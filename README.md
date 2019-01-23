@@ -1,5 +1,7 @@
 # Mesosmock
 
+[![Analytics](https://ga-beacon.irvinlim.com/UA-61872435-6/mesosmock/readme)](https://github.com/irvinlim/ga-beacon)
+
 _Mesosmock is currently still an active work in progress (WIP)._
 
 **Mesosmock** aims to mock the behaviour of a real [Apache Mesos](https://mesos.apache.org/) cluster. Specifically, it is a HTTP server with the same API as a Mesos master, emulating various behaviours as if it is serving a real Mesos cluster. This can be useful for integration/end-to-end tests, or stress/chaos testing of [Mesos frameworks](https://mesos.apache.org/documentation/latest/frameworks/).
